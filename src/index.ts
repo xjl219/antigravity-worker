@@ -63,7 +63,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
 
       for(let attempt=0;attempt<maxAttempts;attempt++){
         const a=await poolPost(env,"/internal/allocate",{
-          session_id:currentSessionId,
+          session_id:sessionId,
           exclude_account_ids:failedAccounts
         });
         if(!a.ok){
