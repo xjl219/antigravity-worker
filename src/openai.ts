@@ -13,7 +13,10 @@ export function toInternal(input:ChatRequest,project:string,defaultModel:string)
   if(input.temperature!==undefined)generationConfig.temperature=input.temperature;
   if(input.top_p!==undefined)generationConfig.topP=input.top_p;
   if(input.max_tokens!==undefined)generationConfig.maxOutputTokens=input.max_tokens;
-  return {model:input.model??defaultModel,project,request:{
+  return {
+    requestId:`agent/${Date.now()}/${crypto.randomUUID().replaceAll("-","").slice(0,8)}`,
+    userAgent:"antigravity/windows/amd64",
+    model:input.model??defaultModel,project,request:{
     contents,...(system?{systemInstruction:{parts:[{text:system}]}}:{}),
     ...(Object.keys(generationConfig).length?{generationConfig}:{})
   }};
