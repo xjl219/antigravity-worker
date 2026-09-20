@@ -1,0 +1,4 @@
+ADMIN_API_KEY="replace-with-a-long-random-value"
+GOOGLE_CLIENT_ID="your-google-oauth-client-id"
+GOOGLE_CLIENT_SECRET="your-google-oauth-client-secret"
+TOKEN_ENCRYPTION_KEY="generate-a-random-secret-at-least-32-bytes"
