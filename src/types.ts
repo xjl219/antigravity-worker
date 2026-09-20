@@ -1,5 +1,5 @@
 export interface Env {
-  ACCOUNT_POOL: DurableObjectNamespace<AccountPoolDO>;
+  ACCOUNT_POOL: DurableObjectNamespace;
   ADMIN_API_KEY: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
