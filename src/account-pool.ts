@@ -29,7 +29,7 @@ export class AccountPoolDO {
     }
     if(req.method==="GET"&&p==="/internal/accounts")return Response.json(this.rows("SELECT id,email,project_id,status,health_score,failure_count,last_used_at,updated_at FROM accounts ORDER BY health_score DESC,last_used_at ASC"));
     if(req.method==="POST"&&p==="/internal/allocate"){const x=await req.json<any>(),now=Date.now();
-      let a=this.rows<AccountRow>("SELECT * FROM accounts WHERE status='ACTIVE' AND cooldown_until<=? ORDER BY health_score DESC,last_used_at ASC LIMIT 1",now)[0];
+      let a=this.rows<AccountRow>(x.preferred_account_id ? "SELECT * FROM accounts WHERE id=? AND status='ACTIVE' LIMIT 1" : "SELECT * FROM accounts WHERE status='ACTIVE' AND cooldown_until<=? ORDER BY health_score DESC,last_used_at ASC LIMIT 1", x.preferred_account_id ? x.preferred_account_id : now)[0];
       if(!a)return new Response("no healthy account", {status:503});
       let access=a.access_token_enc?await decryptString(a.access_token_enc,this.env.TOKEN_ENCRYPTION_KEY):"";
       if(!access||!a.access_token_expires_at||a.access_token_expires_at<Date.now()+60000){
