@@ -1,3 +1,4 @@
+import { DurableObject } from "cloudflare:workers";
 import {decryptString,encryptString,randomBase64Url} from "./crypto";
 import {refreshToken} from "./google-oauth";
 import type {Env,AccountRow,SessionRow} from "./types";
