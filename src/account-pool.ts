@@ -5,9 +5,9 @@ import type {Env,AccountRow,SessionRow} from "./types";
 const SESSION_TTL_MS=24*60*60*1000;
 const REFRESH_LOCK_MS=15_000;
 
-export class AccountPoolDO {
+export class AccountPoolDO extends DurableObject<Env> {
   private initialized=false;
-  constructor(private ctx:DurableObjectState,private env:Env){}
+  constructor(ctx:DurableObjectState,env:Env){ super(ctx,env); }
 
   private init(){
     if(this.initialized)return; this.initialized=true;
