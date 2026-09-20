@@ -2,7 +2,7 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 
 function b64u(bytes: Uint8Array): string {
   let s=""; for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");
+  return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 }
 function unb64u(s:string):Uint8Array {
   const p=s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4);
