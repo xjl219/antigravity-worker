@@ -24,6 +24,8 @@ export type SessionRow = {
 };
 
 export type InternalGenerateRequest = {
+  requestId?: string;
+  userAgent?: string;
   model: string; project: string;
   request: {
     contents: Array<{role:"user"|"model";parts:Array<{text:string}>}>;
