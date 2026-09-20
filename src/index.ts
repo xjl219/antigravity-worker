@@ -63,7 +63,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
 
       for(let attempt=0;attempt<maxAttempts;attempt++){
         const a=await poolPost(env,"/internal/allocate",{
-          session_id:sessionId,
+          session_id:currentSessionId,
           exclude_account_ids:failedAccounts
         });
         if(!a.ok){
@@ -73,6 +73,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
 
         const account=await a.json<any>();
         sessionId=account.session_id;
+        const currentSessionId: string = sessionId;
         if(!account.project_id)return new Response("account has no Code Assist project",{status:503});
 
         const internal=toInternal(input,account.project_id,env.DEFAULT_MODEL);
@@ -85,32 +86,32 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
             const stream=streamToOpenAI(
               upstream.body!,
               internal.model,
-              async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});},
-              async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});}
+              async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:currentSessionId});},
+              async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:502});}
             );
             return new Response(stream,{
               headers:{
                 "content-type":"text/event-stream; charset=utf-8",
                 "cache-control":"no-cache",
                 "connection":"keep-alive",
-                "x-antigravity-session-id":sessionId
+                "x-antigravity-session-id":currentSessionId
               }
             });
           }
 
-          await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});
+          await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:currentSessionId});
           const response=await toOpenAI(upstream,internal.model);
-          response.headers.set("x-antigravity-session-id",sessionId);
+          response.headers.set("x-antigravity-session-id",currentSessionId);
           return response;
         }catch(e){
           if(e instanceof UpstreamError){
             lastError=e;
-            await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:e.status});
+            await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:e.status});
             failedAccounts.push(account.account_id);
             if(retryable(e.status)&&attempt<maxAttempts-1)continue;
             return new Response(e.body,{status:e.status,headers:{"content-type":"application/json"}});
           }
-          await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});
+          await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:502});
           throw e;
         }
       }
