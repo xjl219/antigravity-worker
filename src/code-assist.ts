@@ -6,7 +6,7 @@ export class CodeAssistClient {
   private async post(m:string,token:string,body:unknown){
     return fetch(this.url(m),{method:"POST",headers:{
       Authorization:`Bearer ${token}`,"Content-Type":"application/json",
-      "User-Agent":"antigravity-worker/0.1"
+      "User-Agent":"antigravity/windows/amd64"
     },body:JSON.stringify(body)});
   }
   async loadCodeAssist(token:string){
