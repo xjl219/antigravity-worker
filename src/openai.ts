@@ -31,7 +31,7 @@ export function streamToOpenAI(
   onFailure?:()=>Promise<void>
 ){
   const dec=new TextDecoder(),enc=new TextEncoder();
-  let buf="",role=false;
+  let buf="",role=false,chatId=`chatcmpl-${crypto.randomUUID()}`,created=Math.floor(Date.now()/1000);
   return new ReadableStream<Uint8Array>({
     start(controller){
       const reader=body.getReader();
@@ -53,9 +53,9 @@ export function streamToOpenAI(
               const t=parts.filter((p:any)=>typeof p.text==="string").map((p:any)=>p.text).join("");
               if(!t)continue;
               const chunk={
-                id:`chatcmpl-${crypto.randomUUID()}`,
+                id:chatId,
                 object:"chat.completion.chunk",
-                created:Math.floor(Date.now()/1000),
+                created,
                 model,
                 choices:[{index:0,delta:role?{content:t}:{role:"assistant",content:t},finish_reason:null}]
               };
