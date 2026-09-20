@@ -72,8 +72,8 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
         }
 
         const account=await a.json<any>();
-        sessionId=account.session_id;
-        const currentSessionId: string = sessionId;
+        const currentSessionId = account.session_id as string;
+        sessionId=currentSessionId;
         if(!account.project_id)return new Response("account has no Code Assist project",{status:503});
 
         const internal=toInternal(input,account.project_id,env.DEFAULT_MODEL);
