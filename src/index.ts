@@ -1,7 +1,8 @@
 import {randomBase64Url,encryptString} from "./crypto";
 import {authorizationUrl,exchangeCode,userInfo} from "./google-oauth";
 import {CodeAssistClient,UpstreamError} from "./code-assist";
-import {toInternal,streamToOpenAI,toOpenAI} from "./openai";\nimport {toAnthropicInternal,anthropicResponse,anthropicStream} from "./anthropic";
+import {toInternal,streamToOpenAI,toOpenAI} from "./openai";
+import {toAnthropicInternal,anthropicResponse,anthropicStream} from "./anthropic";
 import type {Env,ChatRequest,AnthropicRequest} from "./types";
 export {AccountPoolDO} from "./account-pool";
 
