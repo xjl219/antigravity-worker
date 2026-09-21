@@ -4,9 +4,11 @@ function text(c:ChatRequest["messages"][number]["content"]){
   return typeof c==="string"?c:c.filter(x=>!x.type||x.type==="text").map(x=>x.text??"").join("");
 }
 
+const DEFAULT_UA="Antigravity/4.3.0 (X11; Linux x86_64) Chrome/132.0.6834.160 Electron/39.2.3";
+
 export function toInternal(input:ChatRequest,project:string,defaultModel:string):InternalGenerateRequest{
   const system=input.messages.filter(x=>x.role==="system").map(x=>text(x.content)).filter(Boolean).join("\n\n");
-  const contents=input.messages.filter(x=>x.role!=="system").map(x=>({
+  const contents=input.messages.filter(x=>x.role!=="system"&&x.role!=="tool").map(x=>({
     role:x.role==="assistant"?"model" as const:"user" as const,parts:[{text:text(x.content)}]
   }));
   const generationConfig:Record<string,unknown>={};
@@ -15,21 +17,17 @@ export function toInternal(input:ChatRequest,project:string,defaultModel:string)
   if(input.max_tokens!==undefined)generationConfig.maxOutputTokens=input.max_tokens;
   return {
     requestId:`agent/${Date.now()}/${crypto.randomUUID().replaceAll("-","").slice(0,8)}`,
-    userAgent:"antigravity/windows/amd64",
+    userAgent:DEFAULT_UA,
     model:input.model??defaultModel,project,request:{
-    contents,...(system?{systemInstruction:{parts:[{text:system}]}}:{}),
-    ...(Object.keys(generationConfig).length?{generationConfig}:{})
-  }};
+      contents,...(system?{systemInstruction:{parts:[{text:system}]}}:{}),
+      ...(Object.keys(generationConfig).length?{generationConfig}:{})
+    }
+  };
 }
 
-function sse(x:unknown){return `data: ${JSON.stringify(x)}\n\n`;}
+function sse(x:unknown){return `data: ${JSON.stringify(x)}\\n\\n`;}
 
-export function streamToOpenAI(
-  body:ReadableStream<Uint8Array>,
-  model:string,
-  onSuccess?:()=>Promise<void>,
-  onFailure?:()=>Promise<void>
-){
+export function streamToOpenAI(body:ReadableStream<Uint8Array>,model:string,onSuccess?:()=>Promise<void>,onFailure?:()=>Promise<void>){
   const dec=new TextDecoder(),enc=new TextEncoder();
   let buf="",role=false,chatId=`chatcmpl-${crypto.randomUUID()}`,created=Math.floor(Date.now()/1000);
   return new ReadableStream<Uint8Array>({
@@ -38,8 +36,7 @@ export function streamToOpenAI(
       (async()=>{
         try{
           for(;;){
-            const {done,value}=await reader.read();
-            if(done)break;
+            const {done,value}=await reader.read();if(done)break;
             buf+=dec.decode(value,{stream:true});
             const lines=buf.split(/\r?\n/);buf=lines.pop()??"";
             for(const line of lines){
@@ -47,37 +44,25 @@ export function streamToOpenAI(
               if(!raw||raw.startsWith(":"))continue;
               if(raw.startsWith("data:"))raw=raw.slice(5).trim();
               if(!raw||raw==="[DONE]")continue;
-              let o:any;
-              try{o=JSON.parse(raw)}catch{continue}
+              let o:any;try{o=JSON.parse(raw)}catch{continue}
               const a=o.response??o,parts=a?.candidates?.[0]?.content?.parts??[];
               const t=parts.filter((p:any)=>typeof p.text==="string").map((p:any)=>p.text).join("");
               if(!t)continue;
-              const chunk={
-                id:chatId,
-                object:"chat.completion.chunk",
-                created,
-                model,
+              controller.enqueue(enc.encode(sse({
+                id:chatId,object:"chat.completion.chunk",created,model,
                 choices:[{index:0,delta:role?{content:t}:{role:"assistant",content:t},finish_reason:null}]
-              };
-              role=true;controller.enqueue(enc.encode(sse(chunk)));
+              })));
+              role=true;
             }
           }
           controller.enqueue(enc.encode(sse({
-            id:chatId,
-            object:"chat.completion.chunk",
-            created,
-            model,
+            id:chatId,object:"chat.completion.chunk",created,model,
             choices:[{index:0,delta:{},finish_reason:"stop"}]
           })));
-          controller.enqueue(enc.encode("data: [DONE]\n\n"));
-          controller.close();
-          await onSuccess?.();
-        }catch(e){
-          await onFailure?.();
-          controller.error(e);
-        }finally{
-          reader.releaseLock();
-        }
+          controller.enqueue(enc.encode("data: [DONE]\\n\\n"));
+          controller.close();await onSuccess?.();
+        }catch(e){await onFailure?.();controller.error(e)}
+        finally{reader.releaseLock()}
       })();
     }
   });
@@ -86,11 +71,10 @@ export function streamToOpenAI(
 export async function toOpenAI(r:Response,model:string){
   const o:any=await r.json(),a=o.response??o,parts=a?.candidates?.[0]?.content?.parts??[];
   const content=parts.filter((p:any)=>typeof p.text==="string").map((p:any)=>p.text).join("");
+  const u=a?.usageMetadata??{};
   return Response.json({
-    id:`chatcmpl-${crypto.randomUUID()}`,
-    object:"chat.completion",
-    created:Math.floor(Date.now()/1000),
-    model,
-    choices:[{index:0,message:{role:"assistant",content},finish_reason:"stop"}]
+    id:`chatcmpl-${crypto.randomUUID()}`,object:"chat.completion",created:Math.floor(Date.now()/1000),model,
+    choices:[{index:0,message:{role:"assistant",content},finish_reason:"stop"}],
+    usage:{prompt_tokens:u.promptTokenCount??u.total_input_tokens??0,completion_tokens:u.candidatesTokenCount??u.total_output_tokens??0,total_tokens:(u.promptTokenCount??u.total_input_tokens??0)+(u.candidatesTokenCount??u.total_output_tokens??0)}
   });
 }
