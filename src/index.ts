@@ -67,13 +67,13 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
         try{
           const upstream=await new CodeAssistClient(env).generate(account.access_token,toAnthropicInternal(input,projectId,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64"),!!input.stream);
           if(input.stream){
-            const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});});
+            const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:currentSessionId});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:502});});
             return new Response(stream,{headers:{"content-type":"text/event-stream","cache-control":"no-cache","x-antigravity-session-id":currentSessionId}});
           }
           await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});
           const out=Response.json(anthropicResponse(await upstream.json(),input.model)); out.headers.set("x-antigravity-session-id",sessionId); return out;
         }catch(e){
-          if(e instanceof UpstreamError){last=e;await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:e.status});failed.push(account.account_id);if((e.status===401||e.status===403||e.status===429||e.status>=500)&&attempt<2)continue;return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:e.body}}),{status:e.status,headers:{"content-type":"application/json"}});}
+          if(e instanceof UpstreamError){last=e;await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:e.status});failed.push(account.account_id);if((e.status===401||e.status===403||e.status===429||e.status>=500)&&attempt<2)continue;return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:e.body}}),{status:e.status,headers:{"content-type":"application/json"}});}
           throw e;
         }
       }
@@ -136,7 +136,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
         }catch(e){
           if(e instanceof UpstreamError){
             lastError=e;
-            await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:e.status});
+            await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:e.status});
             failedAccounts.push(account.account_id);
             if(retryable(e.status)&&attempt<maxAttempts-1)continue;
             return new Response(e.body,{status:e.status,headers:{"content-type":"application/json"}});
