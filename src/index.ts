@@ -61,9 +61,10 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       for(let attempt=0;attempt<3;attempt++){
         const a=await poolPost(env,"/internal/allocate",{session_id:sessionId,exclude_account_ids:failed}); if(!a.ok)return a;
         const account=await a.json<any>(); sessionId=account.session_id;
-        if(!account.project_id)return new Response("account has no Code Assist project",{status:503});
+        const projectId=account.project_id as string;
+         if(!projectId)return new Response("account has no Code Assist project",{status:503});
         try{
-          const upstream=await new CodeAssistClient(env).generate(account.access_token,toAnthropicInternal(input,account.project_id,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64"),!!input.stream);
+          const upstream=await new CodeAssistClient(env).generate(account.access_token,toAnthropicInternal(input,projectId,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64"),!!input.stream);
           if(input.stream){
             const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});});
             return new Response(stream,{headers:{"content-type":"text/event-stream","cache-control":"no-cache","x-antigravity-session-id":sessionId}});
