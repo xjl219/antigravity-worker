@@ -59,20 +59,21 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(!input.messages?.length||!input.max_tokens)return new Response(JSON.stringify({type:"error",error:{type:"invalid_request_error",message:"messages and max_tokens are required"}}),{status:400,headers:{"content-type":"application/json"}});
       let sessionId=req.headers.get("x-antigravity-session-id")||undefined; const failed:string[]=[]; let last:UpstreamError|undefined;
       for(let attempt=0;attempt<3;attempt++){
-        const a=await poolPost(env,"/internal/allocate",{session_id:sessionId,exclude_account_ids:failed}); if(!a.ok)return a;
-        const account=await a.json<any>(); sessionId=account.session_id;
+        const a=await poolPost(env,"/internal/allocate",{session_id:currentSessionId,exclude_account_ids:failed}); if(!a.ok)return a;
+        const account=await a.json<any>(); sessionId=account.session_id as string;
+         const currentSessionId=sessionId;
         const projectId=account.project_id as string;
          if(!projectId)return new Response("account has no Code Assist project",{status:503});
         try{
           const upstream=await new CodeAssistClient(env).generate(account.access_token,toAnthropicInternal(input,projectId,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64"),!!input.stream);
           if(input.stream){
-            const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});});
-            return new Response(stream,{headers:{"content-type":"text/event-stream","cache-control":"no-cache","x-antigravity-session-id":sessionId}});
+            const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:currentSessionId});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:502});});
+            return new Response(stream,{headers:{"content-type":"text/event-stream","cache-control":"no-cache","x-antigravity-session-id":currentSessionId}});
           }
-          await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});
+          await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:currentSessionId});
           const out=Response.json(anthropicResponse(await upstream.json(),input.model)); out.headers.set("x-antigravity-session-id",sessionId); return out;
         }catch(e){
-          if(e instanceof UpstreamError){last=e;await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:e.status});failed.push(account.account_id);if((e.status===401||e.status===403||e.status===429||e.status>=500)&&attempt<2)continue;return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:e.body}}),{status:e.status,headers:{"content-type":"application/json"}});}
+          if(e instanceof UpstreamError){last=e;await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:e.status});failed.push(account.account_id);if((e.status===401||e.status===403||e.status===429||e.status>=500)&&attempt<2)continue;return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:e.body}}),{status:e.status,headers:{"content-type":"application/json"}});}
           throw e;
         }
       }
@@ -92,7 +93,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
 
       for(let attempt=0;attempt<maxAttempts;attempt++){
         const a=await poolPost(env,"/internal/allocate",{
-          session_id:sessionId,
+          session_id:currentSessionId,
           exclude_account_ids:failedAccounts
         });
         if(!a.ok){
