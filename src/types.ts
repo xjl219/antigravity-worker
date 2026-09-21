@@ -7,7 +7,7 @@ export interface Env {
   GOOGLE_CODE_ASSIST_BASE_URL: string;
   GOOGLE_OAUTH_REDIRECT_PATH: string;
   PUBLIC_BASE_URL: string;
-  DEFAULT_MODEL: string;
+  DEFAULT_MODEL: string;\n  ANTHROPIC_USER_AGENT?: string;
 }
 
 export type AccountRow = {
@@ -26,7 +26,7 @@ export type SessionRow = {
 export type InternalGenerateRequest = {
   requestId?: string;
   userAgent?: string;
-  model: string; project: string;
+  model: string; project?: string;
   request: {
     contents: Array<{role:"user"|"model";parts:Array<{text:string}>}>;
     systemInstruction?: {parts:Array<{text:string}>};
@@ -41,4 +41,16 @@ export type ChatRequest = {
     content: string | Array<{type?:string;text?:string}>;
   }>;
   temperature?: number; top_p?: number; max_tokens?: number; stream?: boolean;
+};
+
+export type AnthropicMessage={role:"user"|"assistant";content:string|Array<{
+  type:"text"|"image"|"tool_use"|"tool_result";text?:string;id?:string;name?:string;
+  input?:Record<string,unknown>;tool_use_id?:string;content?:string|Array<{type:"text";text:string}>;
+  source?:{type:"base64";media_type:string;data:string};
+}>};
+export type AnthropicRequest={
+  model:string;messages:AnthropicMessage[];system?:string|Array<{type:"text";text:string}>;
+  max_tokens:number;stream?:boolean;temperature?:number;top_p?:number;top_k?:number;stop_sequences?:string[];
+  tools?:Array<{name:string;description?:string;input_schema?:Record<string,unknown>}>;
+  tool_choice?:string|{type:string;name?:string};metadata?:Record<string,unknown>;
 };
