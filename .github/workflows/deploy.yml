@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      DEPLOYED_WORKER_URL: ${{ secrets.DEPLOYED_WORKER_URL }}
 
     steps:
       - name: Checkout
@@ -37,9 +39,7 @@ jobs:
         run: npx wrangler deploy
 
       - name: Smoke test
-        if: ${{ secrets.DEPLOYED_WORKER_URL != '' }}
-        env:
-          DEPLOYED_WORKER_URL: ${{ secrets.DEPLOYED_WORKER_URL }}
+        if: ${{ env.DEPLOYED_WORKER_URL != '' }}
         run: |
           set -euo pipefail
           url="${DEPLOYED_WORKER_URL%/}/health"
