@@ -31,6 +31,10 @@ export type InternalGenerateRequest = {
     contents: Array<{role:"user"|"model";parts:Array<{text:string}>}>;
     systemInstruction?: {parts:Array<{text:string}>};
     generationConfig?: Record<string, unknown>;
+    tools?: Array<Record<string, unknown>>;
+    toolConfig?: Record<string, unknown>;
+    tool_config?: Record<string, unknown>;
+    safetySettings?: Array<Record<string, unknown>>;
   };
 };
 
