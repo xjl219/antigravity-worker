@@ -25,7 +25,7 @@ export function toInternal(input:ChatRequest,project:string,defaultModel:string)
   };
 }
 
-function sse(x:unknown){return `data: ${JSON.stringify(x)}\\n\\n`;}
+function sse(x:unknown){return `data: ${JSON.stringify(x)}\n\n`;}
 
 export function streamToOpenAI(body:ReadableStream<Uint8Array>,model:string,onSuccess?:()=>Promise<void>,onFailure?:()=>Promise<void>){
   const dec=new TextDecoder(),enc=new TextEncoder();
@@ -59,7 +59,7 @@ export function streamToOpenAI(body:ReadableStream<Uint8Array>,model:string,onSu
             id:chatId,object:"chat.completion.chunk",created,model,
             choices:[{index:0,delta:{},finish_reason:"stop"}]
           })));
-          controller.enqueue(enc.encode("data: [DONE]\\n\\n"));
+          controller.enqueue(enc.encode("data: [DONE]\n\n"));
           controller.close();await onSuccess?.();
         }catch(e){await onFailure?.();controller.error(e)}
         finally{reader.releaseLock()}
