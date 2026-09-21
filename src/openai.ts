@@ -63,9 +63,9 @@ export function streamToOpenAI(
             }
           }
           controller.enqueue(enc.encode(sse({
-            id:`chatcmpl-${crypto.randomUUID()}`,
+            id:chatId,
             object:"chat.completion.chunk",
-            created:Math.floor(Date.now()/1000),
+            created,
             model,
             choices:[{index:0,delta:{},finish_reason:"stop"}]
           })));
