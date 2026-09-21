@@ -31,5 +31,5 @@ jobs:
           BODY="$(cat /tmp/tsc.log | tail -c 12000)"
           gh issue create --title "CI diagnostic ${{ github.sha }}" --body "```text
 $BODY
-```" --label "bug" || true
+```" || true
       - run: npm test
