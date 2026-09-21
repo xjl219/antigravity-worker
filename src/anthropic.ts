@@ -146,7 +146,7 @@ function finishOf(o:any):string|undefined{
 
 export function anthropicResponse(o:any,requestedModel:string){
   const ps=partsOf(o);
-  const content=ps.flatMap((p:any)=>{
+  const content:any[] = ps.flatMap((p:any): any[]=>{
     if(p.thought)return [{type:"thinking",thinking:p.text??"",...(validSignature(p.thoughtSignature)?{signature:p.thoughtSignature}:{})}];
     if(p.text!==undefined)return [{type:"text",text:p.text}];
     if(p.functionCall)return [{type:"tool_use",id:p.functionCall.id??crypto.randomUUID(),name:p.functionCall.name,input:p.functionCall.args??{}}];
