@@ -1,8 +1,8 @@
 import {randomBase64Url,encryptString} from "./crypto";
 import {authorizationUrl,exchangeCode,userInfo} from "./google-oauth";
 import {CodeAssistClient,UpstreamError} from "./code-assist";
-import {toInternal,streamToOpenAI,toOpenAI} from "./openai";
-import type {Env,ChatRequest} from "./types";
+import {toInternal,streamToOpenAI,toOpenAI} from "./openai";\nimport {toAnthropicInternal,anthropicResponse,anthropicStream} from "./anthropic";
+import type {Env,ChatRequest,AnthropicRequest} from "./types";
 export {AccountPoolDO} from "./account-pool";
 
 function admin(req:Request,env:Env){return req.headers.get("authorization")===`Bearer ${env.ADMIN_API_KEY}`;}
@@ -50,6 +50,31 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     if(u.pathname==="/admin/accounts"){
       if(!admin(req,env))return new Response("unauthorized",{status:401});
       return poolGet(env,"/internal/accounts");
+    }
+
+    if(req.method==="POST"&&u.pathname==="/v1/messages"){
+      if(!admin(req,env))return new Response(JSON.stringify({type:"error",error:{type:"authentication_error",message:"unauthorized"}}),{status:401,headers:{"content-type":"application/json"}});
+      const input=await req.json<AnthropicRequest>();
+      if(!input.messages?.length||!input.max_tokens)return new Response(JSON.stringify({type:"error",error:{type:"invalid_request_error",message:"messages and max_tokens are required"}}),{status:400,headers:{"content-type":"application/json"}});
+      let sessionId=req.headers.get("x-antigravity-session-id")||undefined; const failed:string[]=[]; let last:UpstreamError|undefined;
+      for(let attempt=0;attempt<3;attempt++){
+        const a=await poolPost(env,"/internal/allocate",{session_id:sessionId,exclude_account_ids:failed}); if(!a.ok)return a;
+        const account=await a.json<any>(); sessionId=account.session_id;
+        if(!account.project_id)return new Response("account has no Code Assist project",{status:503});
+        try{
+          const upstream=await new CodeAssistClient(env).generate(account.access_token,toAnthropicInternal(input,account.project_id,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64"),!!input.stream);
+          if(input.stream){
+            const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});});
+            return new Response(stream,{headers:{"content-type":"text/event-stream","cache-control":"no-cache","x-antigravity-session-id":sessionId}});
+          }
+          await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});
+          const out=Response.json(anthropicResponse(await upstream.json(),input.model)); out.headers.set("x-antigravity-session-id",sessionId); return out;
+        }catch(e){
+          if(e instanceof UpstreamError){last=e;await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:e.status});failed.push(account.account_id);if((e.status===401||e.status===403||e.status===429||e.status>=500)&&attempt<2)continue;return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:e.body}}),{status:e.status,headers:{"content-type":"application/json"}});}
+          throw e;
+        }
+      }
+      return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:last?.body??"upstream unavailable"}}),{status:last?.status??503,headers:{"content-type":"application/json"}});
     }
 
     if(req.method==="POST"&&u.pathname==="/v1/chat/completions"){
