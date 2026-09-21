@@ -23,7 +23,8 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(!admin(req,env))return new Response("unauthorized",{status:401});
       const state=randomBase64Url(),verifier=randomBase64Url();
       await poolPost(env,"/internal/oauth/pending",{state,verifier});
-      return Response.redirect(await authorizationUrl(env,state,verifier),302);
+      const redirectUri=new URL(env.GOOGLE_OAUTH_REDIRECT_PATH,req.url).toString();
+      return Response.redirect(await authorizationUrl(env,state,verifier,redirectUri),302);
     }
 
     if(u.pathname==="/oauth/google/callback"){
@@ -32,7 +33,8 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       const pending=await poolPost(env,"/internal/oauth/consume",{state});
       const pv=await pending.json<any>();
       if(!pv?.verifier)return new Response("invalid or expired state",{status:400});
-      const token=await exchangeCode(env,code,pv.verifier),info=await userInfo(token.access_token);
+      const redirectUri=new URL(env.GOOGLE_OAUTH_REDIRECT_PATH,req.url).toString();
+      const token=await exchangeCode(env,code,pv.verifier,redirectUri),info=await userInfo(token.access_token);
       const client=new CodeAssistClient(env),meta=await client.loadCodeAssist(token.access_token);
       const project=meta?.cloudaicompanionProject??meta?.projectId??meta?.project?.id??null;
       const id=info.sub??info.email??crypto.randomUUID();
