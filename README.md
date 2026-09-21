@@ -21,10 +21,10 @@ The Worker does not create quota or bypass Google entitlement. Each account uses
 
 1. npm install
 2. Copy .dev.vars.example to .dev.vars and fill secrets.
-3. Set PUBLIC_BASE_URL in wrangler.jsonc to your Worker URL.
-4. Configure the exact OAuth callback URL in the Google OAuth client:
-   PUBLIC_BASE_URL + /oauth/google/callback
-5. npm run dev
+3. Configure the exact OAuth callback URL in the Google OAuth client:
+   https://YOUR_WORKER_HOST/oauth/google/callback
+   The Worker derives this URI from the incoming request host.
+4. npm run dev
 
 Production secrets should be configured with Wrangler secrets, not committed to git.
 
