@@ -9,9 +9,9 @@ const SCOPES=[
   "https://www.googleapis.com/auth/userinfo.profile"
 ];
 
-export async function authorizationUrl(env:Env,state:string,verifier:string){
+export async function authorizationUrl(env:Env,state:string,verifier:string,redirectUri:string){
   const u=new URL(AUTH); u.searchParams.set("client_id",env.GOOGLE_CLIENT_ID);
-  u.searchParams.set("redirect_uri",env.PUBLIC_BASE_URL+env.GOOGLE_OAUTH_REDIRECT_PATH);
+  u.searchParams.set("redirect_uri",redirectUri);
   u.searchParams.set("response_type","code"); u.searchParams.set("scope",SCOPES.join(" "));
   u.searchParams.set("access_type","offline"); u.searchParams.set("prompt","consent");
   u.searchParams.set("state",state); u.searchParams.set("code_challenge",await pkceChallenge(verifier));
@@ -22,10 +22,10 @@ async function post(env:Env,params:URLSearchParams){
   if(!r.ok) throw new Error(`Google OAuth ${r.status}: ${await r.text()}`);
   return r.json<any>();
 }
-export function exchangeCode(env:Env,code:string,verifier:string){
+export function exchangeCode(env:Env,code:string,verifier:string,redirectUri:string){
   return post(env,new URLSearchParams({
     client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,code,
-    grant_type:"authorization_code",redirect_uri:env.PUBLIC_BASE_URL+env.GOOGLE_OAUTH_REDIRECT_PATH,
+    grant_type:"authorization_code",redirect_uri:redirectUri,
     code_verifier:verifier
   }));
 }
