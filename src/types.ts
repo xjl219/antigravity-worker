@@ -7,7 +7,9 @@ export interface Env {
   GOOGLE_CODE_ASSIST_BASE_URL: string;
   GOOGLE_OAUTH_REDIRECT_PATH: string;
   PUBLIC_BASE_URL: string;
-  DEFAULT_MODEL: string;\n  ANTHROPIC_USER_AGENT?: string;
+  DEFAULT_MODEL: string;
+  ANTHROPIC_USER_AGENT?: string;
+  ANTIGRAVITY_USER_AGENT?: string;
 }
 
 export type AccountRow = {
@@ -23,38 +25,61 @@ export type SessionRow = {
   last_used_at: number; expires_at: number;
 };
 
+export type GeminiPart = {
+  text?: string;
+  thought?: boolean;
+  thoughtSignature?: string;
+  thought_signature?: string;
+  inlineData?: { mimeType: string; data: string };
+  functionCall?: { name: string; args: Record<string, unknown>; id?: string };
+  functionResponse?: { name: string; id?: string; response: Record<string, unknown> };
+};
+
 export type InternalGenerateRequest = {
   requestId?: string;
   userAgent?: string;
-  model: string; project?: string;
+  model: string;
+  project?: string;
   request: {
-    contents: Array<{role:"user"|"model";parts:Array<{text:string}>}>;
+    contents: Array<{role:"user"|"model";parts:Array<GeminiPart>}>;
     systemInstruction?: {parts:Array<{text:string}>};
     generationConfig?: Record<string, unknown>;
     tools?: Array<Record<string, unknown>>;
     toolConfig?: Record<string, unknown>;
     tool_config?: Record<string, unknown>;
     safetySettings?: Array<Record<string, unknown>>;
+    cachedContent?: string;
   };
 };
 
 export type ChatRequest = {
   model?: string;
   messages: Array<{
-    role: "system"|"user"|"assistant";
+    role: "system"|"user"|"assistant"|"tool";
     content: string | Array<{type?:string;text?:string}>;
+    tool_call_id?: string;
+    name?: string;
   }>;
   temperature?: number; top_p?: number; max_tokens?: number; stream?: boolean;
 };
 
-export type AnthropicMessage={role:"user"|"assistant";content:string|Array<{
-  type:"text"|"image"|"tool_use"|"tool_result";text?:string;id?:string;name?:string;
-  input?:Record<string,unknown>;tool_use_id?:string;content?:string|Array<{type:"text";text:string}>;
-  source?:{type:"base64";media_type:string;data:string};
-}>};
+export type AnthropicContentBlock =
+  | {type:"text"; text:string; cache_control?:unknown}
+  | {type:"thinking"; thinking:string; signature?:string}
+  | {type:"redacted_thinking"; data:string}
+  | {type:"image"; source?:{type:"base64";media_type:string;data:string}; cache_control?:unknown}
+  | {type:"tool_use"; id:string; name:string; input:Record<string,unknown>; signature?:string}
+  | {type:"tool_result"; tool_use_id:string; content?:string|Array<{type:"text";text:string}>; is_error?:boolean};
+
+export type AnthropicMessage={role:"user"|"assistant";content:string|AnthropicContentBlock[]};
+
 export type AnthropicRequest={
-  model:string;messages:AnthropicMessage[];system?:string|Array<{type:"text";text:string}>;
-  max_tokens:number;stream?:boolean;temperature?:number;top_p?:number;top_k?:number;stop_sequences?:string[];
+  model:string; messages:AnthropicMessage[];
+  system?:string|Array<{type:"text";text:string}>;
+  max_tokens:number; stream?:boolean; temperature?:number; top_p?:number; top_k?:number;
+  stop_sequences?:string[];
   tools?:Array<{name:string;description?:string;input_schema?:Record<string,unknown>}>;
-  tool_choice?:string|{type:string;name?:string};metadata?:Record<string,unknown>;
+  tool_choice?:string|{type:string;name?:string};
+  metadata?:Record<string,unknown>;
+  thinking?:{type:"enabled";budget_tokens?:number}|{type:"disabled"};
 };
