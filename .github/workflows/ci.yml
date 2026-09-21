@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
   pull_request:
+permissions:
+  contents: read
+  issues: write
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -13,5 +16,20 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run types
-      - run: npm run check
+      - name: TypeScript check
+        id: tsc
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee /tmp/tsc.log
+      - name: Publish diagnostics
+        if: failure() && steps.tsc.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          BODY="$(cat /tmp/tsc.log | tail -c 12000)"
+          gh issue create --title "CI diagnostic ${{ github.sha }}" --body "```text
+$BODY
+```" --label "bug" || true
       - run: npm test
