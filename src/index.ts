@@ -59,7 +59,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(!input.messages?.length||!input.max_tokens)return new Response(JSON.stringify({type:"error",error:{type:"invalid_request_error",message:"messages and max_tokens are required"}}),{status:400,headers:{"content-type":"application/json"}});
       let sessionId=req.headers.get("x-antigravity-session-id")||undefined; const failed:string[]=[]; let last:UpstreamError|undefined;
       for(let attempt=0;attempt<3;attempt++){
-        const a=await poolPost(env,"/internal/allocate",{session_id:currentSessionId,exclude_account_ids:failed}); if(!a.ok)return a;
+        const a=await poolPost(env,"/internal/allocate",{session_id:sessionId,exclude_account_ids:failed}); if(!a.ok)return a;
         const account=await a.json<any>(); sessionId=account.session_id as string;
          const currentSessionId=sessionId;
         const projectId=account.project_id as string;
