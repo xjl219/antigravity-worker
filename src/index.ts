@@ -21,15 +21,17 @@ function time(v:unknown){const n=Number(v);return Number.isFinite(n)&&n>0?new Da
 async function adminPage(env:Env){
   const r=await poolGet(env,"/internal/accounts"), a=await r.json<any[]>();
   const active=a.filter(x=>x.status==="active").length, blocked=a.filter(x=>x.status==="blocked").length, cooldown=a.filter(x=>x.status==="cooldown").length;
-  const rows=a.map(x=>`<tr><td><b>${html(x.email)}</b><small>${html(x.id)}</small></td><td><span class="s ${html(x.status)}">${html(x.status)}</span></td><td>${Number(x.health_score??0)}</td><td><code>${html(x.project_id||"未解析")}</code></td><td>${html(time(x.access_token_expires_at))}</td><td>${html(time(x.cooldown_until))}</td><td><a href="/admin/accounts/${encodeURIComponent(x.id)}/quota" target="_blank">Quota</a></td></tr>`).join("");
-  const doc=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Antigravity Accounts</title>
-<style>
-body{margin:0;background:#0b1020;color:#e9eef8;font:14px system-ui,-apple-system,sans-serif}.wrap{max-width:1200px;margin:35px auto;padding:0 20px}h1{margin:0 0 4px;font-size:25px}.sub,small{display:block;color:#8996ad;font-size:12px}.top{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.btn,a{color:#8db7ff;text-decoration:none}.btn{background:#2563eb;color:#fff;border-radius:9px;padding:9px 14px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.card,.panel{background:#121a2b;border:1px solid #27334d;border-radius:13px}.card{padding:16px}.num{font-size:25px;font-weight:700;margin-top:5px}.green{color:#46d39a}.yellow{color:#f6c85f}.red{color:#ff6b7a}.panel{overflow:auto}table{width:100%;min-width:900px;border-collapse:collapse}th,td{padding:13px 15px;text-align:left;border-bottom:1px solid #27334d}th{color:#8996ad;font-size:12px;background:#10182a}.s{padding:3px 8px;border-radius:99px;background:#29344a}.s.active{color:#46d39a;background:#12352c}.s.blocked{color:#ff6b7a;background:#3b2028}.s.cooldown{color:#f6c85f;background:#3b321d}code{color:#a9c7ff}.empty{text-align:center;padding:40px;color:#8996ad}@media(max-width:700px){.top{align-items:flex-start;flex-direction:column}.cards{grid-template-columns:repeat(2,1fr)}}
-</style><div class="wrap"><div class="top"><div><h1>Antigravity Accounts</h1><div class="sub">Google / Code Assist 账号池管理</div></div><div><a class="btn" href="/oauth/google/start">＋ 添加 Google 账号</a>　<a href="/admin/accounts">刷新</a></div></div>
-<div class="cards"><div class="card"><div class="sub">账号总数</div><div class="num">${a.length}</div></div><div class="card"><div class="sub">正常</div><div class="num green">${active}</div></div><div class="card"><div class="sub">冷却中</div><div class="num yellow">${cooldown}</div></div><div class="card"><div class="sub">已阻断</div><div class="num red">${blocked}</div></div></div>
-<div class="panel"><table><thead><tr><th>Google 账号</th><th>状态</th><th>健康度</th><th>Project</th><th>Token 到期</th><th>冷却结束</th><th>操作</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">暂无账号</td></tr>'}</tbody></table></div>
-<p class="sub">Token 不在页面展示，仅在 Worker / Durable Object 内加密保存。</p></div>`;
-  return new Response(doc,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+  const rows=a.map(x=>{
+    const email=String(x.email||x.id), id=String(x.id);
+    return \`<tr><td><div class="account"><div class="avatar">\${html(email.slice(0,1).toUpperCase())}</div><div><b>\${html(email)}</b><small>\${html(id)}</small></div></div></td><td><span class="s \${html(x.status)}">\${html(x.status)}</span></td><td><div class="health"><span>\${Number(x.health_score??0)}</span><div><i style="width:\${Math.max(0,Math.min(100,Number(x.health_score??0)))}%"></i></div></div></td><td><code>\${html(x.project_id||"未解析")}</code></td><td>\${html(time(x.access_token_expires_at))}</td><td>\${html(time(x.cooldown_until))}</td><td><div class="actions"><a class="link" href="/admin/accounts/\${encodeURIComponent(id)}/quota">额度</a><form method="post" action="/admin/accounts/\${encodeURIComponent(id)}/delete" onsubmit="return confirm('确定删除账号 '+\${JSON.stringify(email)}+'？\\n\\n将删除加密 token、会话和账号记录，无法撤销。')"><button class="danger" type="submit">删除</button></form></div></td></tr>\`;
+  }).join("");
+  const doc=String.raw\`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Antigravity · Accounts</title>
+<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#080d17;color:#edf3ff;font:14px/1.5 system-ui,-apple-system,sans-serif}.shell{width:min(1280px,calc(100% - 32px));margin:34px auto}.top{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.brand{display:flex;align-items:center;gap:12px}.logo{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#4f7cff,#8b5cf6);display:grid;place-items:center;font-weight:800;font-size:19px}.brand h1{margin:0;font-size:22px}.sub{color:#8797b0;font-size:12px}.btn{display:inline-flex;align-items:center;border-radius:10px;padding:10px 14px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;border:1px solid #3b82f6}.btn.secondary{margin-left:8px;background:#111b2c;border-color:#2b3b56}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px}.card{background:#101827;border:1px solid #22314a;border-radius:15px;padding:17px}.label{color:#8797b0;font-size:12px}.num{font-size:27px;font-weight:750;margin-top:4px}.green{color:#55ddb0}.yellow{color:#f6ca61}.red{color:#ff7482}.panel{background:#101827;border:1px solid #22314a;border-radius:17px;overflow:hidden}.table-head{padding:16px 18px;border-bottom:1px solid #22314a;display:flex;justify-content:space-between}.table-head b{font-size:15px}table{width:100%;border-collapse:collapse;min-width:1020px}th,td{padding:14px 16px;text-align:left;border-bottom:1px solid #1e2b40}th{background:#0d1523;color:#8191aa;font-size:11px;text-transform:uppercase}tr:last-child td{border-bottom:0}.account{display:flex;align-items:center;gap:11px}.avatar{width:34px;height:34px;border-radius:10px;background:#1d2d4b;display:grid;place-items:center;color:#9fc0ff;font-weight:800}.account small{display:block;color:#73839c;font-size:10px;margin-top:2px}.s{display:inline-block;padding:4px 9px;border-radius:99px;background:#273348;font-size:11px}.s.active{color:#55ddb0;background:#10372e}.s.blocked{color:#ff7482;background:#3d2029}.s.cooldown{color:#f6ca61;background:#3c321e}.health{display:flex;align-items:center;gap:8px}.health>span{width:24px}.health>div{width:55px;height:5px;border-radius:99px;background:#243249;overflow:hidden}.health i{display:block;height:100%;background:#55ddb0;border-radius:99px}.link{color:#9fc0ff;text-decoration:none}.actions{display:flex;align-items:center;gap:12px}.actions form{margin:0}.danger{border:0;background:none;color:#ff7b87;padding:0;cursor:pointer;font:inherit}.danger:hover{text-decoration:underline}code{color:#a9c7ff;font-size:11px}.empty{text-align:center;padding:55px!important;color:#7f8da4}.foot{padding:13px 18px;color:#718098;font-size:11px;border-top:1px solid #1e2b40}@media(max-width:760px){.shell{margin:20px auto}.top{align-items:flex-start;flex-direction:column}.cards{grid-template-columns:repeat(2,1fr)}.panel{overflow:auto}}</style></head>
+<body><main class="shell"><div class="top"><div class="brand"><div class="logo">A</div><div><h1>Antigravity Accounts</h1><div class="sub">Google / Code Assist 账号池 · 管理控制台</div></div></div><div><a class="btn" href="/oauth/google/start">＋ 添加 Google 账号</a><a class="btn secondary" href="/admin/accounts">刷新</a></div></div>
+<div class="cards"><div class="card"><div class="label">账号总数</div><div class="num">%%TOTAL%%</div></div><div class="card"><div class="label">正常</div><div class="num green">%%ACTIVE%%</div></div><div class="card"><div class="label">冷却中</div><div class="num yellow">%%COOLDOWN%%</div></div><div class="card"><div class="label">已阻断</div><div class="num red">%%BLOCKED%%</div></div></div>
+<section class="panel"><div class="table-head"><b>账号池</b><span class="sub">Token 仅在 Worker / Durable Object 内加密保存</span></div><table><thead><tr><th>Google 账号</th><th>状态</th><th>健康度</th><th>Project</th><th>Token 到期</th><th>冷却结束</th><th>操作</th></tr></thead><tbody>%%ROWS%%</tbody></table><div class="foot">删除账号会同时删除加密 access/refresh token、会话与账号记录；删除后不可恢复，需要重新授权。</div></section></main></body></html>\`;
+  const page=doc.replaceAll("%%TOTAL%%",String(a.length)).replaceAll("%%ACTIVE%%",String(active)).replaceAll("%%COOLDOWN%%",String(cooldown)).replaceAll("%%BLOCKED%%",String(blocked)).replace("%%ROWS%%",rows||'<tr><td colspan="7" class="empty">暂无账号，点击右上角添加 Google 账号</td></tr>');
+  return new Response(page,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
 }
 function pool(env:Env){return env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default"));}
 async function poolPost(env:Env,path:string,body:unknown){
@@ -77,33 +79,28 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     if(req.method==="GET"&&u.pathname==="/health")return Response.json({ok:true,service:"antigravity-worker",time:new Date().toISOString()});
 
     if(u.pathname==="/oauth/google/start"){
-      // Match Antigravity Tools v4.7.11 Web/Docker behavior:
-      // use the built-in OAuth client and a loopback redirect, then manually submit
-      // the callback URL when no local listener exists on the user's machine.
       const state=randomBase64Url(24);
       const port=49152+(crypto.getRandomValues(new Uint16Array(1))[0]%12000);
-      const redirectUri=`http://localhost:${port}/oauth-callback`;
-      const pendingPayload=JSON.stringify({redirectUri,clientKey:"antigravity_enterprise"});
-      await poolPost(env,"/internal/oauth/pending",{state,verifier:pendingPayload});
+      const redirectUri=\`http://localhost:\${port}/oauth-callback\`;
+      await poolPost(env,"/internal/oauth/pending",{state,verifier:JSON.stringify({redirectUri,clientKey:"antigravity_enterprise"})});
       const authUrl=authorizationUrl(env,state,redirectUri);
       const esc=(v:string)=>v.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
-      const html=`<!doctype html><html><head><meta charset="utf-8"><title>Antigravity OAuth</title></head>
-      <body style="font-family:system-ui;max-width:900px;margin:40px auto;padding:0 20px">
-      <h2>Antigravity Google OAuth</h2>
-      <p>1. Open the authorization link below and finish Google authorization.</p>
-      <p><a href="${esc(authUrl)}" target="_blank" rel="noopener">Open Google Authorization</a></p>
-      <p>2. After authorization, the browser may show <b>localhost refused connection</b>. This is expected for a remote Worker.</p>
-      <p>3. Copy the complete URL from that browser address bar and paste it below.</p>
-      <form method="post" action="/oauth/google/complete" style="display:grid;gap:10px">
-        <label>Callback URL or code</label>
-        <textarea name="callback_url" rows="4" style="width:100%" placeholder="http://localhost:.../oauth-callback?code=...&amp;state=..."></textarea>
-        <label>Worker ADMIN_API_KEY</label>
-        <input name="admin_key" type="password" autocomplete="off" style="width:100%"/>
-        <button type="submit">Complete OAuth</button>
-      </form>
-      <p style="color:#666">OAuth state: <code>${esc(state)}</code></p>
-      </body></html>`;
-      return new Response(html,{headers:{"content-type":"text/html; charset=utf-8"}});
+      const loggedIn=await admin(req,env);
+      const doc=String.raw\`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>添加 Google 账号 · Antigravity</title>
+<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0%,#19315f,#080d17 48%);color:#eef4ff;font:14px/1.6 system-ui,-apple-system,sans-serif}.shell{width:min(860px,calc(100% - 32px));margin:45px auto}.brand{display:flex;gap:12px;align-items:center;margin-bottom:22px}.logo{width:43px;height:43px;border-radius:13px;background:linear-gradient(135deg,#4f7cff,#8b5cf6);display:grid;place-items:center;font-weight:800;font-size:19px}.brand h1{margin:0;font-size:20px}.muted{color:#91a0b7}.card{background:#101827ee;border:1px solid #263653;border-radius:20px;box-shadow:0 25px 70px #0008;overflow:hidden}.head{padding:25px 28px;border-bottom:1px solid #263653}.head h2{margin:0 0 4px;font-size:24px}.body{padding:28px}.steps{display:grid;gap:11px;margin-bottom:23px}.step{display:flex;gap:13px;padding:15px;border:1px solid #263653;background:#0c1422;border-radius:14px}.num{width:28px;height:28px;border-radius:50%;background:#2563eb;display:grid;place-items:center;font-weight:800;flex:0 0 auto}.step b{display:block}.action{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.btn{display:inline-flex;align-items:center;justify-content:center;padding:11px 16px;border-radius:11px;border:1px solid #3b82f6;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;cursor:pointer}.btn.secondary{background:#172238;border-color:#33445f}.field{margin-top:18px}.field label{display:block;font-weight:650;margin-bottom:7px}.field textarea,.field input{width:100%;background:#080e19;color:#edf4ff;border:1px solid #33445f;border-radius:11px;padding:12px;outline:none}.field textarea{min-height:110px;resize:vertical;font:12px ui-monospace,SFMono-Regular,Consolas,monospace}.hint{font-size:12px;color:#8191aa;margin-top:7px}.warn{margin-top:18px;padding:12px 14px;border:1px solid #6b5524;background:#302612;color:#f4d98a;border-radius:11px}.adminkey{display:%%ADMIN_DISPLAY%%}.footer{padding:15px 28px;border-top:1px solid #263653;background:#0c1422;display:flex;justify-content:space-between;gap:12px;font-size:12px}@media(max-width:600px){.shell{margin:22px auto}.body,.head{padding:20px}}</style></head>
+<body><main class="shell"><div class="brand"><div class="logo">A</div><div><h1>Antigravity Worker</h1><div class="muted">Google / Code Assist 账号接入</div></div></div>
+<section class="card"><div class="head"><h2>添加 Google 账号</h2><div class="muted">沿用 Antigravity Tools 的真实 OAuth 协议；Worker 只负责安全保存授权结果。</div></div><div class="body">
+<div class="steps"><div class="step"><span class="num">1</span><div><b>打开 Google 授权</b><span class="muted">使用需要接入的 Google 账号完成授权。</span></div></div>
+<div class="step"><span class="num">2</span><div><b>复制授权后的完整地址</b><span class="muted">当前协议使用 localhost loopback redirect。远程 Worker 没有你的本机监听端口，所以看到 localhost 无法连接是预期现象。</span></div></div>
+<div class="step"><span class="num">3</span><div><b>粘贴回调地址并完成绑定</b><span class="muted">Worker 从 callback URL 中读取 code/state，并在服务端完成 token exchange。</span></div></div></div>
+<div class="action"><a class="btn" href="%%AUTH_URL%%" target="_blank" rel="noopener">继续 Google 授权 ↗</a><a class="btn secondary" href="/admin/accounts">返回账号池</a></div>
+<form method="post" action="/oauth/google/complete"><div class="field"><label>Google 授权后的完整地址</label><textarea name="callback_url" placeholder="http://localhost:%%PORT%%/oauth-callback?code=...&state=..."></textarea><div class="hint">请从浏览器地址栏完整复制，不要只复制 code。</div></div>
+<div class="field adminkey"><label>管理员密钥</label><input name="admin_key" type="password" autocomplete="off" placeholder="当前浏览器没有管理会话时填写"></div>
+<div class="action" style="margin-top:16px"><button class="btn" type="submit">完成账号绑定</button></div></form>
+<div class="warn">安全提示：不要粘贴 Google access token / refresh token。本页面只需要 OAuth 回调地址。</div></div>
+<div class="footer"><span class="muted">OAuth state：<code>%%STATE%%</code></span><span class="muted">有效期约 10 分钟</span></div></section></main></body></html>\`;
+      const page=doc.replaceAll("%%AUTH_URL%%",esc(authUrl)).replaceAll("%%PORT%%",String(port)).replaceAll("%%STATE%%",esc(state)).replaceAll("%%ADMIN_DISPLAY%%",loggedIn?"none":"block");
+      return new Response(page,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
     }
 
     if(u.pathname==="/oauth/google/callback"){
@@ -133,6 +130,15 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(adminKey!==env.ADMIN_API_KEY)return new Response("unauthorized",{status:401});
       if(!code||!state)return new Response("callback_url/code and state are required",{status:400});
       return completeOAuth(req,env,code,state);
+    }
+
+    if(u.pathname.startsWith("/admin/accounts/")&&u.pathname.endsWith("/delete")&&req.method==="POST"){
+      if(!await admin(req,env))return new Response("unauthorized",{status:401});
+      const id=decodeURIComponent(u.pathname.split("/")[3]||"");
+      if(!id)return new Response("account id is required",{status:400});
+      const r=await pool(env).fetch(`https://pool/internal/account/${encodeURIComponent(id)}`,{method:"DELETE"});
+      if(!r.ok)return new Response(await r.text(),{status:r.status});
+      return new Response(null,{status:303,headers:{"location":"/admin/accounts","cache-control":"no-store"}});
     }
 
     if(u.pathname==="/admin/accounts"){
@@ -278,12 +284,33 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
 
     if(u.pathname.startsWith("/admin/accounts/")&&u.pathname.endsWith("/quota")){
       if(!await admin(req,env))return new Response("unauthorized",{status:401});
-      const id=u.pathname.split("/")[3];
-      const a=await poolPost(env,"/internal/allocate",{preferred_account_id:id});
-      if(!a.ok)return a;
-      const x=await a.json<any>();
-      const q=await new CodeAssistClient(env).retrieveUserQuota(x.access_token,x.project_id??undefined);
-      return Response.json(q);
+      const id=decodeURIComponent(u.pathname.split("/")[3]||"");
+      const accounts=await (await poolGet(env,"/internal/accounts")).json<any[]>();
+      const account=accounts.find(x=>x.id===id);
+      if(!account)return new Response("account not found",{status:404});
+      if(u.searchParams.get("format")==="json"){
+        const a=await poolPost(env,"/internal/allocate",{preferred_account_id:id});
+        if(!a.ok)return a;
+        const x=await a.json<any>();
+        const q=await new CodeAssistClient(env).retrieveUserQuota(x.access_token,x.project_id??undefined);
+        return Response.json(q,{headers:{"cache-control":"no-store"}});
+      }
+      const doc=String.raw\`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>额度 · %%EMAIL%%</title>
+<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#080d17;color:#edf3ff;font:14px/1.5 system-ui,-apple-system,sans-serif}.shell{width:min(1180px,calc(100% - 32px));margin:32px auto}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:20px}.brand{display:flex;gap:12px;align-items:center}.logo{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#4f7cff,#8b5cf6);display:grid;place-items:center;font-weight:800}.h1{font-size:22px;font-weight:750}.muted{color:#8797b0;font-size:12px}.actions{display:flex;gap:8px}.btn{display:inline-flex;border:1px solid #2b3b56;background:#111b2c;color:#b8cbef;border-radius:10px;padding:9px 13px;text-decoration:none;font-weight:650;cursor:pointer}.btn.primary{background:#2563eb;border-color:#3b82f6;color:#fff}.hero{background:#101827;border:1px solid #22314a;border-radius:17px;padding:19px;margin-bottom:16px}.meta{display:flex;gap:28px;flex-wrap:wrap}.meta b{display:block;margin-top:3px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-bottom:16px}.card{background:#101827;border:1px solid #22314a;border-radius:15px;padding:17px}.label{color:#8797b0;font-size:12px}.value{font-size:21px;font-weight:750;margin-top:5px}.panel{background:#101827;border:1px solid #22314a;border-radius:17px;overflow:hidden}.panel-head{padding:16px 18px;border-bottom:1px solid #22314a;display:flex;justify-content:space-between}.quota-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:16px}.bucket{background:#0c1422;border:1px solid #22314a;border-radius:13px;padding:15px}.bucket h3{font-size:13px;margin:0 0 12px;word-break:break-word}.bar{height:7px;background:#243249;border-radius:99px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;background:#4f8cff;border-radius:99px}.row{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#95a4bb}.loading,.error{padding:35px;text-align:center;color:#8797b0}.error{color:#ff8b96}.raw{margin:0 16px 16px;border-top:1px solid #22314a;padding-top:14px}.raw summary{cursor:pointer;color:#9db7e8}.raw pre{white-space:pre-wrap;word-break:break-word;color:#aebbd0;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;background:#080e19;padding:14px;border-radius:10px;max-height:520px;overflow:auto}@media(max-width:760px){.shell{margin:20px auto}.top{flex-direction:column}.grid,.quota-grid{grid-template-columns:1fr}}</style></head>
+<body><main class="shell"><div class="top"><div class="brand"><div class="logo">A</div><div><div class="h1">账号额度</div><div class="muted">%%EMAIL%%</div></div></div><div class="actions"><a class="btn" href="/admin/accounts">← 账号池</a><button class="btn primary" id="refresh">刷新额度</button></div></div>
+<section class="hero"><div class="meta"><div><span class="muted">Google 账号</span><b>%%EMAIL%%</b></div><div><span class="muted">Project</span><b>%%PROJECT%%</b></div><div><span class="muted">账号状态</span><b>%%STATUS%%</b></div><div><span class="muted">健康度</span><b>%%HEALTH%% / 100</b></div></div></section>
+<section class="grid"><div class="card"><div class="label">额度来源</div><div class="value">Google Code Assist</div></div><div class="card"><div class="label">查询接口</div><div class="value">retrieveUserQuotaSummary</div></div><div class="card"><div class="label">协议基线</div><div class="value">Antigravity 4.7.11</div></div></section>
+<section class="panel"><div class="panel-head"><b>模型额度</b><span id="updated" class="muted">加载中…</span></div><div id="quota" class="quota-grid"><div class="loading">正在读取 Google 额度…</div></div><div class="raw"><details><summary>查看原始 quota JSON（调试）</summary><pre id="raw"></pre></details></div></section></main>
+<script>
+const quotaEl=document.getElementById("quota"),raw=document.getElementById("raw"),updated=document.getElementById("updated");
+const esc=v=>String(v??"").replace(/[&<>"']/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\" : "&quot;","'":"&#39;"}[s]||s));
+const n=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+function render(q){raw.textContent=JSON.stringify(q,null,2);const models=q&&q.models&&typeof q.models==="object"?q.models:{};const es=Object.entries(models);if(!es.length){quotaEl.innerHTML='<div class="loading" style="grid-column:1/-1">当前返回未包含可识别的 models 额度结构，请展开下方原始 JSON 查看。</div>';return}quotaEl.innerHTML=es.map(([id,m])=>{const o=m&&typeof m==="object"?m:{};const rem=n(o.remainingQuota??o.remaining??o.remainingRequests??o.remainingTokens),lim=n(o.quotaLimit??o.limit??o.maxQuota??o.totalQuota),pct=rem!==null&&lim&&lim>0?Math.max(0,Math.min(100,rem/lim*100)):null;return '<div class="bucket"><h3>'+esc(id)+'</h3><div class="row"><span>剩余</span><b>'+(rem??"—")+'</b></div>'+(pct!==null?'<div class="bar"><i style="width:'+pct+'%"></i></div><div class="row"><span>使用率</span><span>'+((100-pct).toFixed(1))+'%</span></div>':'')+'<div class="row" style="margin-top:8px"><span>重置</span><span>'+esc(o.resetTime??o.resetAt??"—")+'</span></div></div>'}).join("")}
+async function load(){quotaEl.innerHTML='<div class="loading" style="grid-column:1/-1">正在读取 Google 额度…</div>';updated.textContent="刷新中…";try{const r=await fetch(location.pathname+"?format=json",{cache:"no-store"});if(!r.ok)throw new Error(await r.text());const q=await r.json();render(q);updated.textContent="更新于 "+new Date().toLocaleTimeString("zh-CN",{hour12:false})}catch(e){quotaEl.innerHTML='<div class="error" style="grid-column:1/-1">额度读取失败：'+esc(e.message||e)+'</div>';updated.textContent="读取失败"}}
+document.getElementById("refresh").onclick=load;load();
+</script></body></html>\`;
+      const page=doc.replaceAll("%%EMAIL%%",html(account.email||id)).replaceAll("%%PROJECT%%",html(account.project_id||"未解析")).replaceAll("%%STATUS%%",html(account.status)).replaceAll("%%HEALTH%%",String(Number(account.health_score??0)));
+      return new Response(page,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
     }
 
     return new Response("not found",{status:404});
