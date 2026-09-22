@@ -130,6 +130,17 @@ export class AccountPoolDO extends DurableObject<Env> {
       return Response.json(this.rows("SELECT id,email,project_id,status,health_score,failure_count,access_token_expires_at,cooldown_until,last_used_at,updated_at FROM accounts ORDER BY health_score DESC,last_used_at ASC"));
     }
 
+    if(req.method==="DELETE"&&p.startsWith("/internal/account/")){
+      const id=decodeURIComponent(p.slice("/internal/account/".length));
+      if(!id)return new Response("account id is required",{status:400});
+      const existing=this.rows<AccountRow>("SELECT id FROM accounts WHERE id=?",id)[0];
+      if(!existing)return new Response("account not found",{status:404});
+      this.ctx.storage.sql.exec("DELETE FROM sessions WHERE account_id=?",id);
+      this.ctx.storage.sql.exec("DELETE FROM refresh_locks WHERE account_id=?",id);
+      this.ctx.storage.sql.exec("DELETE FROM accounts WHERE id=?",id);
+      return Response.json({ok:true,id});
+    }
+
     if(req.method==="POST"&&p==="/internal/allocate"){
       const x=await req.json<any>(),now=Date.now(),excluded:Array<string>=Array.isArray(x.exclude_account_ids)?x.exclude_account_ids:[];
       let session:SessionRow|undefined;
