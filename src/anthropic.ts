@@ -30,10 +30,39 @@ function textOf(c:unknown):string{
 function systemOf(s:AnthropicRequest["system"]):string{
   return typeof s==="string"?s:(s??[]).map(x=>x.text??"").join("\n\n");
 }
+
+/**
+ * Gemini function declarations use an OpenAPI-style Schema, not full JSON
+ * Schema. Tool clients commonly send JSON Schema draft metadata (for example
+ * `$schema` and `propertyNames`), which the Code Assist API rejects with 400.
+ * Keep the compatible subset and apply it recursively to nested schemas.
+ */
+function geminiSchema(value:unknown):Record<string,unknown>{
+  if(!value||typeof value!=="object"||Array.isArray(value))return {};
+  const schema=value as Record<string,unknown>;
+  const out:Record<string,unknown>={};
+  const type=Array.isArray(schema.type)
+    ?schema.type.find((item):item is string=>typeof item==="string"&&item!=="null")
+    :schema.type;
+
+  if(typeof type==="string")out.type=type;
+  if(Array.isArray(schema.type)&&schema.type.includes("null"))out.nullable=true;
+  if(typeof schema.description==="string")out.description=schema.description;
+  if(typeof schema.format==="string")out.format=schema.format;
+  if(typeof schema.nullable==="boolean")out.nullable=schema.nullable;
+  if(Array.isArray(schema.enum))out.enum=schema.enum.filter((item):item is string=>typeof item==="string");
+  if(Array.isArray(schema.required))out.required=schema.required.filter((item):item is string=>typeof item==="string");
+  if(schema.items&&typeof schema.items==="object"&&!Array.isArray(schema.items))out.items=geminiSchema(schema.items);
+  if(schema.properties&&typeof schema.properties==="object"&&!Array.isArray(schema.properties)){
+    out.properties=Object.fromEntries(Object.entries(schema.properties).map(([name,child])=>[name,geminiSchema(child)]));
+  }
+  return out;
+}
+
 function toolsOf(ts:AnthropicRequest["tools"]){
   if(!ts?.length)return undefined;
   const declarations=ts.filter(x=>x.name).map(x=>({
-    name:x.name,description:x.description??"",parameters:x.input_schema??{}
+    name:x.name,description:x.description??"",parameters:geminiSchema(x.input_schema)
   }));
   return declarations.length?[{functionDeclarations:declarations}]:undefined;
 }
