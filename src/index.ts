@@ -112,10 +112,22 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     }
 
     if(u.pathname==="/admin/accounts"){
-      if(!admin(req,env))return new Response("unauthorized",{status:401});
+      if(!(await admin(req,env))){
+        if(req.method==="GET"){
+          const html="<!doctype html><html><head><meta charset=\"utf-8\"><title>Antigravity Admin</title></head><body style=\"font-family:system-ui;max-width:700px;margin:60px auto;padding:20px\"><h2>Antigravity Admin</h2><p>请输入 ADMIN_API_KEY 查看账号登录状态。</p><form method=\"post\"><input name=\"admin_key\" type=\"password\" placeholder=\"ADMIN_API_KEY\" required style=\"width:70%;padding:10px\"><button style=\"padding:10px 18px\">登录</button></form></body></html>";
+          return new Response(html,{headers:{"content-type":"text/html; charset=utf-8"}});
+        }
+        if(req.method==="POST"){
+          const f=await req.formData(); const k=f.get("admin_key");
+          if(typeof k==="string"&&k===env.ADMIN_API_KEY){
+            const r=await poolGet(env,"/internal/accounts");
+            return new Response(await r.text(),{headers:{"content-type":"application/json; charset=utf-8"}});
+          }
+        }
+        return new Response("unauthorized",{status:401});
+      }
       return poolGet(env,"/internal/accounts");
     }
-
     if(req.method==="POST"&&u.pathname==="/v1/messages"){
       if(!admin(req,env))return new Response(JSON.stringify({type:"error",error:{type:"authentication_error",message:"unauthorized"}}),{status:401,headers:{"content-type":"application/json"}});
       const input=await req.json<AnthropicRequest>();
