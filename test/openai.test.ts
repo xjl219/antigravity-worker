@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {toInternal} from "../src/openai";
 import {toAnthropicInternal} from "../src/anthropic";
+import {statusForFailure} from "../src/account-health";
 describe("OpenAI adapter",()=>{
   it("maps system/user/assistant messages",()=>{
     const x=toInternal({messages:[
@@ -10,6 +11,14 @@ describe("OpenAI adapter",()=>{
     ]},"p","gemini-2.5-flash");
     expect(x.project).toBe("p"); expect(x.request.systemInstruction?.parts[0].text).toBe("be concise");
     expect(x.request.contents[1].role).toBe("model");
+  });
+});
+
+describe("Account health",()=>{
+  it("only permanently blocks accounts for failed authentication",()=>{
+    expect(statusForFailure(401)).toBe("BLOCKED");
+    expect(statusForFailure(403)).toBe("ACTIVE");
+    expect(statusForFailure(429)).toBe("ACTIVE");
   });
 });
 

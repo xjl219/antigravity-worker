@@ -1,10 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import {decryptString,encryptString,randomBase64Url} from "./crypto";
 import {refreshToken} from "./google-oauth";
+import {statusForFailure} from "./account-health";
 import type {Env,AccountRow,SessionRow} from "./types";
 
 const SESSION_TTL_MS=24*60*60*1000;
 const REFRESH_LOCK_MS=15_000;
+const FORBIDDEN_COOLDOWN_MS=60_000;
 
 export class AccountPoolDO extends DurableObject<Env> {
   private initialized=false;
@@ -141,6 +143,15 @@ export class AccountPoolDO extends DurableObject<Env> {
       return Response.json({ok:true,id});
     }
 
+    if(req.method==="POST"&&p.startsWith("/internal/account/")&&p.endsWith("/reactivate")){
+      const id=decodeURIComponent(p.slice("/internal/account/".length,-"/reactivate".length));
+      if(!id)return new Response("account id is required",{status:400});
+      const existing=this.rows<AccountRow>("SELECT id FROM accounts WHERE id=?",id)[0];
+      if(!existing)return new Response("account not found",{status:404});
+      this.ctx.storage.sql.exec("UPDATE accounts SET status='ACTIVE',cooldown_until=0,health_score=MAX(health_score,50),updated_at=? WHERE id=?",Date.now(),id);
+      return Response.json({ok:true,id});
+    }
+
     if(req.method==="POST"&&p==="/internal/allocate"){
       const x=await req.json<any>(),now=Date.now(),excluded:Array<string>=Array.isArray(x.exclude_account_ids)?x.exclude_account_ids:[];
       let session:SessionRow|undefined;
@@ -189,11 +200,11 @@ export class AccountPoolDO extends DurableObject<Env> {
 
     if(req.method==="POST"&&p==="/internal/failure"){
       const x=await req.json<any>(),status=Number(x.status)||500;
-      const cooldown=status===429?60_000:status===401||status===403?24*60*60*1000:status>=500?15_000:10_000;
+      const cooldown=status===429?60_000:status===401?24*60*60*1000:status===403?FORBIDDEN_COOLDOWN_MS:status>=500?15_000:10_000;
       const penalty=status===429?5:10;
       this.ctx.storage.sql.exec(
         "UPDATE accounts SET health_score=MAX(0,health_score-?),failure_count=failure_count+1,cooldown_until=?,status=?,updated_at=? WHERE id=?",
-        penalty,Date.now()+cooldown,status===401||status===403?"BLOCKED":"ACTIVE",Date.now(),x.account_id
+        penalty,Date.now()+cooldown,statusForFailure(status),Date.now(),x.account_id
       );
       if(x.session_id)this.ctx.storage.sql.exec("DELETE FROM sessions WHERE session_id=?",x.session_id);
       return Response.json({ok:true});
