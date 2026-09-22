@@ -1,0 +1,19 @@
+
+> antigravity-worker@0.1.0 check
+> tsc --noEmit
+
+src/index.ts(27,12): error TS1127: Invalid character.
+src/index.ts(39,27): error TS1005: ';' expected.
+src/index.ts(40,1): error TS1109: Expression expected.
+src/index.ts(41,1): error TS1005: ',' expected.
+src/index.ts(43,1): error TS1005: ',' expected.
+src/index.ts(45,1): error TS1005: ',' expected.
+src/index.ts(54,1): error TS1005: ',' expected.
+src/index.ts(77,1): error TS1005: ',' expected.
+src/index.ts(85,25): error TS1127: Invalid character.
+src/index.ts(85,26): error TS1134: Variable declaration expected.
+src/index.ts(140,38): error TS1005: ';' expected.
+src/index.ts(299,27): error TS1127: Invalid character.
+src/index.ts(299,28): error TS1134: Variable declaration expected.
+src/index.ts(319,4): error TS1005: '}' expected.
+src/index.ts(319,4): error TS1160: Unterminated template literal.
