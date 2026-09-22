@@ -149,31 +149,34 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       }
     }
     if(req.method==="GET"&&u.pathname==="/v1/models"){
-      if(!admin(req,env))return new Response(JSON.stringify({error:{message:"unauthorized",type:"invalid_request_error"}}),{status:401,headers:{"content-type":"application/json"}});
-      const now=Math.floor(Date.now()/1000);
-      // /v1/models is a discovery surface. Generation already passes an explicit
-      // Gemini model through to Code Assist, so do not collapse the inventory to
-      // DEFAULT_MODEL. Keep this list aligned with Antigravity's supported Gemini
-      // families; upstream remains the source of truth for account-specific access.
-      const ids=[
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-3-flash",
-        "gemini-3.1-pro-preview",
-        "gemini-3.1-pro-low",
-        "gemini-3.1-pro-high",
-        "gemini-3.5-flash",
-        "gemini-3.6-flash-tiered",
-        "gemini-3.7-flash-tiered",
-        "gemini-3.7-flash-low",
-        "gemini-3.7-flash-medium",
-        "gemini-3.7-flash-high",
-        "gemini-3.8-flash-tiered"
-      ];
-      return Response.json({
-        object:"list",
-        data:ids.map(id=>({id,object:"model",created:now,owned_by:"google"}))
-      });
+      if(!await admin(req,env))return new Response(JSON.stringify({error:{message:"unauthorized",type:"invalid_request_error"}}),{status:401,headers:{"content-type":"application/json"}});
+      // Match Antigravity Tools v4.7.11: dynamic quota models + built-in aliases/variants.
+      // Dynamic models come from the official fetchAvailableModels endpoint for every
+      // healthy account; built-ins mirror get_supported_models(), plus image combinations.
+      const ids=new Set<string>();
+      const accounts=await (await poolGet(env,"/internal/accounts")).json<any[]>();
+      for(const a of accounts){
+        if(a.status!=="ACTIVE")continue;
+        try{
+          const ar=await poolPost(env,"/internal/allocate",{preferred_account_id:a.id});
+          if(!ar.ok)continue;
+          const x=await ar.json<any>();
+          const q=await new CodeAssistClient(env).fetchAvailableModels(x.access_token,x.project_id??undefined);
+          const models=q?.models&&typeof q.models==="object"?Object.keys(q.models):[];
+          for(const id of models){
+            if(id.startsWith("gemini")||id.startsWith("claude")||id.startsWith("gpt")||id.startsWith("image")||id.startsWith("imagen"))ids.add(id);
+          }
+        }catch{}
+      }
+      for(const id of ["claude-sonnet-4-6","claude-sonnet-4-6-thinking","claude-sonnet-4-5","claude-sonnet-4-5-thinking","claude-sonnet-4-5-20250929","claude-3-5-sonnet-20241022","claude-3-5-sonnet-20240620","claude-opus-4","claude-opus-4-5-thinking","claude-opus-4-5-20251101","claude-opus-4-6-thinking","claude-opus-4-6","claude-opus-4.6-thinking","claude-opus-4.6","claude-opus-4-6-20260201","claude-haiku-4","claude-3-haiku-20240307","claude-haiku-4-5-20251001","gpt-4","gpt-4-turbo","gpt-4-turbo-preview","gpt-4-0125-preview","gpt-4-1106-preview","gpt-4-0613","gpt-4o","gpt-4o-2024-05-13","gpt-4o-2024-08-06","gpt-4o-mini","gpt-4o-mini-2024-07-18","gpt-3.5-turbo","gpt-3.5-turbo-16k","gpt-3.5-turbo-0125","gpt-3.5-turbo-1106","gpt-3.5-turbo-0613","gemini-2.5-flash-lite","gemini-2.5-flash-thinking","gemini-3.1-pro-low","gemini-3.1-pro-high","gemini-3.1-pro-preview","gemini-3.1-pro","gemini-3-pro-low","gemini-3-pro-high","gemini-3-pro-preview","gemini-3-pro","gemini-2.5-flash","gemini-3-flash","gemini-3.5-flash","gemini-3.6-flash","gemini-3.7-flash","gemini-3.7-flash-tiered","gemini-3.7-flash-low","gemini-3.7-flash-medium","gemini-3.7-flash-high","gemini-3-pro-image","internal-background-task"])ids.add(id);
+      for(const res of ["","-2k","-4k"])for(const ratio of ["","-1x1","-4x3","-3x4","-16x9","-9x16","-21x9"])ids.add("gemini-3-pro-image"+res+ratio);
+      ids.add("gemini-2.0-flash-exp");
+      ids.add("gemini-2.5-flash");
+      ids.add("gemini-3-flash");
+      ids.add("gemini-3.1-pro-high");
+      ids.add("gemini-3.1-pro-low");
+      const data=[...ids].sort().map(id=>({id,object:"model",created:1706745600,owned_by:"antigravity"}));
+      return Response.json({object:"list",data});
     }
 
     if(req.method==="POST"&&u.pathname==="/v1/messages"){
