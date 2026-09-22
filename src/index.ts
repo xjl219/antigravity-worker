@@ -131,9 +131,28 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     if(req.method==="GET"&&u.pathname==="/v1/models"){
       if(!admin(req,env))return new Response(JSON.stringify({error:{message:"unauthorized",type:"invalid_request_error"}}),{status:401,headers:{"content-type":"application/json"}});
       const now=Math.floor(Date.now()/1000);
+      // /v1/models is a discovery surface. Generation already passes an explicit
+      // Gemini model through to Code Assist, so do not collapse the inventory to
+      // DEFAULT_MODEL. Keep this list aligned with Antigravity's supported Gemini
+      // families; upstream remains the source of truth for account-specific access.
+      const ids=[
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-3-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-pro-low",
+        "gemini-3.1-pro-high",
+        "gemini-3.5-flash",
+        "gemini-3.6-flash-tiered",
+        "gemini-3.7-flash-tiered",
+        "gemini-3.7-flash-low",
+        "gemini-3.7-flash-medium",
+        "gemini-3.7-flash-high",
+        "gemini-3.8-flash-tiered"
+      ];
       return Response.json({
         object:"list",
-        data:[{id:env.DEFAULT_MODEL,object:"model",created:now,owned_by:"google"}]
+        data:ids.map(id=>({id,object:"model",created:now,owned_by:"google"}))
       });
     }
 
