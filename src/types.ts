@@ -3,8 +3,6 @@ export interface Env {
   ADMIN_API_KEY: string;
   TOKEN_ENCRYPTION_KEY: string;
   GOOGLE_CODE_ASSIST_BASE_URL: string;
-  GOOGLE_OAUTH_REDIRECT_PATH: string;
-  PUBLIC_BASE_URL: string;
   DEFAULT_MODEL: string;
   ANTHROPIC_USER_AGENT?: string;
   ANTIGRAVITY_USER_AGENT?: string;
