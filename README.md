@@ -6,28 +6,27 @@ Cloudflare Worker adapter for an authorized Google Code Assist / Antigravity-com
 >
 > **合规边界**：本项目不创建 Google quota、不绕过 Google entitlement、不提供规避账号/配额限制的机制。每个账号都必须由账号所有者正常授权并使用其自身可用的服务额度。
 
-## 1. 傻瓜式部署：推荐方式
+## 1. Cloudflare Dashboard 手动部署
 
-最简单的生产部署方式是：
+本项目按 **Cloudflare Workers Dashboard 手动部署**设计。
 
-**GitHub + GitHub Actions + Cloudflare Workers**
+不需要 GitHub Actions，也不需要 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`。
 
-你只需要做一次配置，之后发布新版本只需要：
+需要的 Worker Secrets 只有：
 
-```bash
-git tag v0.1.0
-git push origin v0.1.0
+| Secret | 用途 |
+|---|---|
+| `ADMIN_API_KEY` | Worker 管理/API 鉴权 |
+| `TOKEN_ENCRYPTION_KEY` | Durable Object 中 Google token 的 AES-GCM 加密 |
+
+**不需要创建：**
+
+```text
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
 ```
 
-然后 GitHub Actions 会自动：
-
-1. 安装依赖
-2. TypeScript 检查
-3. 单元测试
-4. 部署 Cloudflare Worker
-5. 如果配置了 `DEPLOYED_WORKER_URL`，自动访问 `/health` 做 Smoke Test
-
-当前部署工作流：`.github/workflows/deploy.yml`
+Antigravity Tools v4.7.11 自带内置 Google OAuth Client；Worker 按该版本的内置 client 和 Web/Docker 手工 OAuth 模式实现。
 
 ---
 
@@ -46,183 +45,88 @@ git push origin v0.1.0
 
 # 3. Cloudflare 配置
 
-## 3.1 创建 Cloudflare API Token
+在 Cloudflare Dashboard 中进入：
 
-进入 Cloudflare Dashboard：
+**Workers & Pages → antigravity-worker → Settings → Variables and Secrets**
 
-**My Profile → API Tokens → Create Token**
-
-建议使用最小权限原则，只授予当前 Worker 所需的 Workers 部署权限。
-
-创建后得到：
-
-```text
-CLOUDFLARE_API_TOKEN
-```
-
-同时准备：
-
-```text
-CLOUDFLARE_ACCOUNT_ID
-```
-
-Account ID 可以在 Cloudflare Dashboard 对应 Account 的概览页面找到。
-
-> API Token 只保存到 GitHub Secrets，不要写入 `.env`、`wrangler.jsonc` 或 Git。
-
----
-
-# 4. GitHub Secrets 配置
-
-进入：
-
-**GitHub → xjl219/antigravity-worker → Settings → Secrets and variables → Actions**
-
-添加以下 Secrets：
-
-| Secret | 必填 | 作用 |
-|---|---:|---|
-| `CLOUDFLARE_API_TOKEN` | 是 | GitHub Actions 部署 Worker |
-| `CLOUDFLARE_ACCOUNT_ID` | 是 | Cloudflare Account ID |
-| `ADMIN_API_KEY` | 是 | Worker 管理接口/API 鉴权 |
-| `GOOGLE_CLIENT_ID` | 是 | Google OAuth Client ID |
-| `GOOGLE_CLIENT_SECRET` | 是 | Google OAuth Client Secret |
-| `TOKEN_ENCRYPTION_KEY` | 是 | Durable Object 中 OAuth token 的 AES-GCM 加密密钥 |
-| `DEPLOYED_WORKER_URL` | 推荐 | 部署后的 Worker 基础 URL，用于自动 `/health` Smoke Test |
-
-其中：
-
-```text
-DEPLOYED_WORKER_URL
-```
-
-例如：
-
-```text
-https://antigravity-worker.example.workers.dev
-```
-
-**不要填写最后的 `/health`。**
-
-如果暂时不配置 `DEPLOYED_WORKER_URL`，部署仍然会成功，只是 GitHub Actions 会跳过 Smoke Test。
-
----
-
-# 5. 生成 ADMIN_API_KEY
-
-建议生成一个高熵随机字符串。
-
-例如本地执行：
-
-```bash
-openssl rand -base64 32
-```
-
-把输出保存为：
+创建：
 
 ```text
 ADMIN_API_KEY
+TOKEN_ENCRYPTION_KEY
 ```
 
-所有管理接口和当前兼容 API 都使用它进行鉴权。
-
-请求示例：
-
-```http
-Authorization: Bearer YOUR_ADMIN_API_KEY
-```
-
----
-
-# 6. 生成 TOKEN_ENCRYPTION_KEY
-
-这个密钥用于加密 Durable Object 中保存的 Google OAuth access token / refresh token。
-
-建议：
+生成随机值：
 
 ```bash
 openssl rand -base64 32
 ```
 
-把结果作为：
-
-```text
-TOKEN_ENCRYPTION_KEY
-```
-
-### 非常重要
-
-这个密钥一旦用于生产环境：
-
-- 不要提交 Git
-- 不要随意修改
-- 不要因为重新部署而重新生成
-- 修改后历史账号 token 可能无法解密
-
-也就是说：
-
-```text
-TOKEN_ENCRYPTION_KEY
-        ↓
-生产数据的一部分
-        ↓
-必须长期保存
-```
+`TOKEN_ENCRYPTION_KEY` 一旦用于生产数据后不要更换，否则历史 token 无法解密。
 
 ---
 
-# 7. 创建 Google OAuth Client
+# 4. Antigravity v4.7.11 OAuth
 
-Google OAuth 用于让用户正常授权自己的 Google 账号。
-
-进入 Google Cloud Console：
-
-**APIs & Services → Credentials → Create Credentials → OAuth client ID**
-
-选择适合 Web 应用的 OAuth Client。
-
-创建后获得：
+协议基线固定为：
 
 ```text
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
+lbjlaq/Antigravity-Manager
+v4.7.11
+61b95bd
 ```
+
+该版本使用内置 OAuth Client：
+
+```text
+client key = antigravity_enterprise
+```
+
+Worker 不要求用户自己创建 Google Cloud OAuth Client。
+
+Google OAuth 使用 loopback redirect，例如：
+
+```text
+http://localhost:<随机端口>/oauth-callback
+```
+
+远程 Cloudflare Worker 无法监听用户电脑的 localhost，因此采用 Antigravity Tools 已有的 manual OAuth continuation：
+
+```text
+Worker
+  ↓
+生成 Google authorization URL
+  ↓
+用户授权
+  ↓
+浏览器跳到 localhost callback
+  ↓
+localhost refused connection（远程 Worker 场景正常）
+  ↓
+复制浏览器地址栏完整 callback URL
+  ↓
+Worker /oauth/google/complete
+  ↓
+exchange code
+  ↓
+userinfo
+  ↓
+loadCodeAssist
+  ↓
+保存 project + token
+```
+
+打开：
+
+```text
+https://YOUR_WORKER_HOST/oauth/google/start
+```
+
+页面会直接给出授权链接和 callback URL 提交表单。
 
 ---
 
-# 8. Google OAuth 回调地址
-
-假设你的 Worker 地址是：
-
-```text
-https://antigravity-worker.example.workers.dev
-```
-
-Google OAuth Authorized redirect URI 必须配置：
-
-```text
-https://antigravity-worker.example.workers.dev/oauth/google/callback
-```
-
-代码会根据实际请求 URL 构造 callback，不需要把域名硬编码进 TypeScript。
-
-### 注意
-
-下面两个地址不是一回事：
-
-```text
-Worker 首页
-https://antigravity-worker.example.workers.dev/
-
-OAuth callback
-https://antigravity-worker.example.workers.dev/oauth/google/callback
-```
-
-Google OAuth 必须填写第二个。
-
----
-
-# 9. Worker 配置文件
+# 5. Worker 配置文件
 
 生产配置位于：
 
@@ -399,43 +303,23 @@ DEFAULT_MODEL
 
 # 11. Worker Secrets 与 wrangler vars 的区别
 
-这是第一次部署最容易搞错的地方。
-
-## 可以放在 wrangler.jsonc
-
-非敏感配置：
+非敏感配置放在 `wrangler.jsonc`：
 
 ```text
 GOOGLE_CODE_ASSIST_BASE_URL
-GOOGLE_OAUTH_REDIRECT_PATH
-PUBLIC_BASE_URL
 DEFAULT_MODEL
 ```
 
-## 必须使用 Secret
-
-敏感配置：
+敏感配置只使用 Cloudflare Secret：
 
 ```text
 ADMIN_API_KEY
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
 TOKEN_ENCRYPTION_KEY
-```
-
-不要把下面这些写进 `wrangler.jsonc`：
-
-```text
-ADMIN_API_KEY
-GOOGLE_CLIENT_SECRET
-TOKEN_ENCRYPTION_KEY
-OAuth refresh token
-OAuth access token
 ```
 
 ---
 
-# 12. 一键发布
+# 12. 手工发布
 
 完成上述配置以后：
 
@@ -476,23 +360,15 @@ git push origin v0.1.1
 
 ---
 
-# 13. 不想打 Tag？手工一键发布
+# 13. Cloudflare Dashboard 发布
 
-进入：
+修改代码后：
 
-**GitHub → Actions → Deploy → Run workflow**
-
-点击：
-
-```text
-Run workflow
-```
-
-GitHub 会直接执行相同的：
-
-```text
-check → test → deploy → smoke test
-```
+1. `npm run check`
+2. `npm test`
+3. 在 Cloudflare Dashboard 重新部署 Worker
+4. 检查 `/health`
+5. 打开 `/oauth/google/start`
 
 ---
 
@@ -516,8 +392,6 @@ npx wrangler login
 
 ```bash
 npx wrangler secret put ADMIN_API_KEY
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
 npx wrangler secret put TOKEN_ENCRYPTION_KEY
 ```
 
@@ -549,8 +423,6 @@ npm run deploy
 
 ```dotenv
 ADMIN_API_KEY="your-admin-key"
-GOOGLE_CLIENT_ID="your-google-client-id"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
 TOKEN_ENCRYPTION_KEY="your-encryption-key"
 ```
 
@@ -957,58 +829,4 @@ Antigravity 上游属于服务控制协议，客户端行为、endpoint、header
 
 ---
 
-# 28. 最短操作版
-
-如果你已经有：
-
-- Cloudflare Account
-- Cloudflare API Token
-- Google OAuth Client
-
-那么只做：
-
-### GitHub Secrets
-
-```text
-CLOUDFLARE_API_TOKEN
-CLOUDFLARE_ACCOUNT_ID
-ADMIN_API_KEY
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-TOKEN_ENCRYPTION_KEY
-DEPLOYED_WORKER_URL
-```
-
-### Google OAuth
-
-添加：
-
-```text
-https://YOUR_WORKER_HOST/oauth/google/callback
-```
-
-### 发布
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-然后等待：
-
-```text
-✓ npm ci
-✓ npm run check
-✓ npm test
-✓ wrangler deploy
-✓ /health
-✓ Production
-```
-
-**以后发布新版本只需要：**
-
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
-
+# 28. 当前最短操作版\n\nCloudflare Secrets：\n\n```text\nADMIN_API_KEY\nTOKEN_ENCRYPTION_KEY\n```\n\n然后重新部署 Worker，打开：\n\n```text\n/oauth/google/start\n```\n\n完成 Google 授权后，复制 localhost callback URL 并在页面提交。\n
