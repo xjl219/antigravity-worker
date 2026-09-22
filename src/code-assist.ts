@@ -12,6 +12,7 @@ const QUOTA_ENDPOINTS=[
 ];
 
 const DEFAULT_UA="Antigravity/4.3.0 (X11; Linux x86_64) Chrome/132.0.6834.160 Electron/39.2.3";
+const NATIVE_OAUTH_UA="vscode/1.X.X (Antigravity/4.7.11)";
 function userAgent(env:Env){
   return (env.ANTIGRAVITY_USER_AGENT||env.ANTHROPIC_USER_AGENT||DEFAULT_UA).trim()||DEFAULT_UA;
 }
@@ -72,7 +73,7 @@ export class CodeAssistClient{
       while(true){
         const r=await fetch(endpoint,{method:"POST",headers:{
           Authorization:"Bearer "+token,"Content-Type":"application/json",
-          "User-Agent":userAgent(this.env),"x-client-name":"antigravity","x-client-version":"4.3.0"
+          "User-Agent":NATIVE_OAUTH_UA,"x-client-name":"antigravity","x-client-version":"4.7.11"
         },body:JSON.stringify(body)});
         if(r.ok)return r.json<any>();
         last=r;
@@ -90,9 +91,9 @@ export class CodeAssistClient{
       const headers:Record<string,string>={
         Authorization:"Bearer "+token,
         "Content-Type":"application/json",
-        "User-Agent":userAgent(this.env),
+        "User-Agent":NATIVE_OAUTH_UA,
         "x-client-name":"antigravity",
-        "x-client-version":"4.3.0"
+        "x-client-version":"4.7.11"
       };
       if(project)headers["x-goog-user-project"]=project;
       const r=await fetch(endpoint,{
@@ -106,9 +107,9 @@ export class CodeAssistClient{
           headers:{
             Authorization:"Bearer "+token,
             "Content-Type":"application/json",
-            "User-Agent":userAgent(this.env),
+            "User-Agent":NATIVE_OAUTH_UA,
             "x-client-name":"antigravity",
-            "x-client-version":"4.3.0"
+            "x-client-version":"4.7.11"
           },
           body:"{}"
         });
