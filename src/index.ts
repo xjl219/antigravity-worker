@@ -129,14 +129,14 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
         if(typeof st==="string"&&st)state=st;
         const k=form.get("admin_key"); adminKey=typeof k==="string"?k:undefined;
       }
-      if(!adminKey&&admin(req,env))adminKey=env.ADMIN_API_KEY;
+      if(!adminKey&&await admin(req,env))adminKey=env.ADMIN_API_KEY;
       if(adminKey!==env.ADMIN_API_KEY)return new Response("unauthorized",{status:401});
       if(!code||!state)return new Response("callback_url/code and state are required",{status:400});
       return completeOAuth(req,env,code,state);
     }
 
     if(u.pathname==="/admin/accounts"){
-      if(req.method==="GET"&&await admin(req,env))return adminPage(env);
+      if(req.method==="GET"&&await await admin(req,env))return adminPage(env);
       if(req.method==="GET"){
         return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Antigravity Admin</title><style>body{margin:0;background:#0b1020;color:#e9eef8;font:15px system-ui;display:grid;place-items:center;min-height:100vh}.box{background:#121a2b;border:1px solid #27334d;border-radius:14px;padding:28px;width:min(390px,calc(100% - 40px));box-sizing:border-box}input,button{width:100%;box-sizing:border-box;padding:11px;margin-top:10px;border-radius:8px}input{background:#0b1020;color:#fff;border:1px solid #34415e}button{background:#2563eb;color:#fff;border:0;font-weight:600}</style><form class="box" method="post"><h2>Antigravity Admin</h2><div>账号池管理控制台</div><input name="admin_key" type="password" placeholder="ADMIN_API_KEY" required><button>登录</button></form>`,{headers:{"content-type":"text/html; charset=utf-8"}});
       }
@@ -149,7 +149,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       }
     }
     if(req.method==="GET"&&u.pathname==="/v1/models"){
-      if(!await admin(req,env))return new Response(JSON.stringify({error:{message:"unauthorized",type:"invalid_request_error"}}),{status:401,headers:{"content-type":"application/json"}});
+      if(!await await admin(req,env))return new Response(JSON.stringify({error:{message:"unauthorized",type:"invalid_request_error"}}),{status:401,headers:{"content-type":"application/json"}});
       // Match Antigravity Tools v4.7.11: dynamic quota models + built-in aliases/variants.
       // Dynamic models come from the official fetchAvailableModels endpoint for every
       // healthy account; built-ins mirror get_supported_models(), plus image combinations.
@@ -180,7 +180,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     }
 
     if(req.method==="POST"&&u.pathname==="/v1/messages"){
-      if(!admin(req,env))return new Response(JSON.stringify({type:"error",error:{type:"authentication_error",message:"unauthorized"}}),{status:401,headers:{"content-type":"application/json"}});
+      if(!await admin(req,env))return new Response(JSON.stringify({type:"error",error:{type:"authentication_error",message:"unauthorized"}}),{status:401,headers:{"content-type":"application/json"}});
       const input=await req.json<AnthropicRequest>();
       if(!input.messages?.length||!input.max_tokens)return new Response(JSON.stringify({type:"error",error:{type:"invalid_request_error",message:"messages and max_tokens are required"}}),{status:400,headers:{"content-type":"application/json"}});
       let sessionId=req.headers.get("x-antigravity-session-id")||undefined; const failed:string[]=[]; let last:UpstreamError|undefined;
@@ -207,7 +207,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     }
 
     if(req.method==="POST"&&u.pathname==="/v1/chat/completions"){
-      if(!admin(req,env))return new Response("unauthorized",{status:401});
+      if(!await admin(req,env))return new Response("unauthorized",{status:401});
       const input=await req.json<ChatRequest>();
       if(!input.messages?.length)return new Response("messages is required",{status:400});
 
@@ -277,7 +277,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     }
 
     if(u.pathname.startsWith("/admin/accounts/")&&u.pathname.endsWith("/quota")){
-      if(!admin(req,env))return new Response("unauthorized",{status:401});
+      if(!await admin(req,env))return new Response("unauthorized",{status:401});
       const id=u.pathname.split("/")[3];
       const a=await poolPost(env,"/internal/allocate",{preferred_account_id:id});
       if(!a.ok)return a;
