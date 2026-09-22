@@ -15,37 +15,101 @@ async function poolGet(env:Env,path:string){return pool(env).fetch(`https://pool
 
 function retryable(status:number){return status===401||status===403||status===429||status>=500;}
 
+function parseOAuthCallback(value:string):{code?:string;state?:string}{
+  try{
+    const u=new URL(value);
+    return {code:u.searchParams.get("code")??undefined,state:u.searchParams.get("state")??undefined};
+  }catch{
+    return {code:value.trim()||undefined,state:undefined};
+  }
+}
+
+async function completeOAuth(_req:Request,env:Env,code:string,state:string):Promise<Response>{
+  const pending=await poolPost(env,"/internal/oauth/consume",{state});
+  const pv=await pending.json<any>();
+  if(!pv?.verifier)return new Response("invalid or expired OAuth state",{status:400});
+  let payload:{redirectUri:string;clientKey?:string};
+  try{payload=JSON.parse(pv.verifier)}catch{return new Response("invalid OAuth state payload",{status:400});}
+  const token=await exchangeCode(env,code,payload.redirectUri);
+  if(!token.refresh_token)return new Response("Google did not return a refresh_token; revoke the existing Antigravity Tools authorization and retry.",{status:400});
+  const info=await userInfo(token.access_token);
+  if(!info.email)return new Response("Google userinfo did not contain email",{status:502});
+  const client=new CodeAssistClient(env);
+  const meta=await client.loadCodeAssist(token.access_token);
+  const project=meta?.cloudaicompanionProject??meta?.projectId??meta?.project?.id??null;
+  const id=info.id??info.email;
+  await poolPost(env,"/internal/account/upsert",{
+    id,email:info.email,project_id:typeof project==="string"?project:null,
+    access_token_enc:await encryptString(token.access_token,env.TOKEN_ENCRYPTION_KEY),
+    refresh_token_enc:await encryptString(token.refresh_token,env.TOKEN_ENCRYPTION_KEY),
+    expires_at:Date.now()+(token.expires_in??3600)*1000
+  });
+  return new Response(`Google account connected: ${info.email}. Code Assist project: ${typeof project==="string"?project:"not resolved"}`,{headers:{"content-type":"text/plain; charset=utf-8"}});
+}
+
 export default {async fetch(req:Request,env:Env):Promise<Response>{
   const u=new URL(req.url);
   try{
     if(req.method==="GET"&&u.pathname==="/health")return Response.json({ok:true,service:"antigravity-worker",time:new Date().toISOString()});
 
     if(u.pathname==="/oauth/google/start"){
-      if(!admin(req,env))return new Response("unauthorized",{status:401});
-      const state=randomBase64Url(),verifier=randomBase64Url();
-      await poolPost(env,"/internal/oauth/pending",{state,verifier});
-      const redirectUri=new URL(env.GOOGLE_OAUTH_REDIRECT_PATH,req.url).toString();
-      return Response.redirect(await authorizationUrl(env,state,verifier,redirectUri),302);
+      // Match Antigravity Tools v4.7.11 Web/Docker behavior:
+      // use the built-in OAuth client and a loopback redirect, then manually submit
+      // the callback URL when no local listener exists on the user's machine.
+      const state=randomBase64Url(24);
+      const port=49152+(crypto.getRandomValues(new Uint16Array(1))[0]%12000);
+      const redirectUri=`http://localhost:${port}/oauth-callback`;
+      const pendingPayload=JSON.stringify({redirectUri,clientKey:"antigravity_enterprise"});
+      await poolPost(env,"/internal/oauth/pending",{state,verifier:pendingPayload});
+      const authUrl=authorizationUrl(env,state,redirectUri);
+      const esc=(v:string)=>v.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+      const html=`<!doctype html><html><head><meta charset="utf-8"><title>Antigravity OAuth</title></head>
+      <body style="font-family:system-ui;max-width:900px;margin:40px auto;padding:0 20px">
+      <h2>Antigravity Google OAuth</h2>
+      <p>1. Open the authorization link below and finish Google authorization.</p>
+      <p><a href="${esc(authUrl)}" target="_blank" rel="noopener">Open Google Authorization</a></p>
+      <p>2. After authorization, the browser may show <b>localhost refused connection</b>. This is expected for a remote Worker.</p>
+      <p>3. Copy the complete URL from that browser address bar and paste it below.</p>
+      <form method="post" action="/oauth/google/complete" style="display:grid;gap:10px">
+        <label>Callback URL or code</label>
+        <textarea name="callback_url" rows="4" style="width:100%" placeholder="http://localhost:.../oauth-callback?code=...&amp;state=..."></textarea>
+        <label>Worker ADMIN_API_KEY</label>
+        <input name="admin_key" type="password" autocomplete="off" style="width:100%"/>
+        <button type="submit">Complete OAuth</button>
+      </form>
+      <p style="color:#666">OAuth state: <code>${esc(state)}</code></p>
+      </body></html>`;
+      return new Response(html,{headers:{"content-type":"text/html; charset=utf-8"}});
     }
 
     if(u.pathname==="/oauth/google/callback"){
       const code=u.searchParams.get("code"),state=u.searchParams.get("state");
       if(!code||!state)return new Response("missing code/state",{status:400});
-      const pending=await poolPost(env,"/internal/oauth/consume",{state});
-      const pv=await pending.json<any>();
-      if(!pv?.verifier)return new Response("invalid or expired state",{status:400});
-      const redirectUri=new URL(env.GOOGLE_OAUTH_REDIRECT_PATH,req.url).toString();
-      const token=await exchangeCode(env,code,pv.verifier,redirectUri),info=await userInfo(token.access_token);
-      const client=new CodeAssistClient(env),meta=await client.loadCodeAssist(token.access_token);
-      const project=meta?.cloudaicompanionProject??meta?.projectId??meta?.project?.id??null;
-      const id=info.sub??info.email??crypto.randomUUID();
-      await poolPost(env,"/internal/account/upsert",{
-        id,email:info.email??id,project_id:typeof project==="string"?project:null,
-        access_token_enc:await encryptString(token.access_token,env.TOKEN_ENCRYPTION_KEY),
-        refresh_token_enc:token.refresh_token?await encryptString(token.refresh_token,env.TOKEN_ENCRYPTION_KEY):null,
-        expires_at:Date.now()+(token.expires_in??3600)*1000
-      });
-      return new Response("Google account connected. You can close this tab.");
+      return completeOAuth(req,env,code,state);
+    }
+
+    if(req.method==="POST"&&u.pathname==="/oauth/google/complete"){
+      let code:string|undefined,state:string|undefined,adminKey:string|undefined;
+      const contentType=req.headers.get("content-type")||"";
+      if(contentType.includes("application/json")){
+        const x=await req.json<any>();
+        code=typeof x.code==="string"?x.code:undefined;
+        state=typeof x.state==="string"?x.state:undefined;
+        adminKey=typeof x.admin_key==="string"?x.admin_key:undefined;
+        if(!code&&typeof x.callback_url==="string")({code,state}=parseOAuthCallback(x.callback_url));
+      }else{
+        const form=await req.formData();
+        const callback=form.get("callback_url");
+        const st=form.get("state");
+        code=typeof callback==="string"?undefined:undefined;
+        if(typeof callback==="string")({code,state}=parseOAuthCallback(callback));
+        if(typeof st==="string"&&st)state=st;
+        const k=form.get("admin_key"); adminKey=typeof k==="string"?k:undefined;
+      }
+      if(!adminKey&&admin(req,env))adminKey=env.ADMIN_API_KEY;
+      if(adminKey!==env.ADMIN_API_KEY)return new Response("unauthorized",{status:401});
+      if(!code||!state)return new Response("callback_url/code and state are required",{status:400});
+      return completeOAuth(req,env,code,state);
     }
 
     if(u.pathname==="/admin/accounts"){
