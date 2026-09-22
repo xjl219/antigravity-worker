@@ -6,7 +6,31 @@ import {toAnthropicInternal,anthropicResponse,anthropicStream} from "./anthropic
 import type {Env,ChatRequest,AnthropicRequest} from "./types";
 export {AccountPoolDO} from "./account-pool";
 
-function admin(req:Request,env:Env){return req.headers.get("authorization")===`Bearer ${env.ADMIN_API_KEY}`;}
+async function adminSession(env:Env){
+  const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(env.ADMIN_API_KEY),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  const s=new Uint8Array(await crypto.subtle.sign("HMAC",k,new TextEncoder().encode("ag-admin-v1")));
+  return Array.from(s,b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function admin(req:Request,env:Env){
+  if(req.headers.get("authorization")===`Bearer ${env.ADMIN_API_KEY}`)return true;
+  const m=(req.headers.get("cookie")||"").match(/(?:^|; )ag_admin=([^;]+)/);
+  return !!m&&m[1]===await adminSession(env);
+}
+function html(v:unknown){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");}
+function time(v:unknown){const n=Number(v);return Number.isFinite(n)&&n>0?new Date(n).toLocaleString("zh-CN",{hour12:false}):"—";}
+async function adminPage(env:Env){
+  const r=await poolGet(env,"/internal/accounts"), a=await r.json<any[]>();
+  const active=a.filter(x=>x.status==="active").length, blocked=a.filter(x=>x.status==="blocked").length, cooldown=a.filter(x=>x.status==="cooldown").length;
+  const rows=a.map(x=>`<tr><td><b>${html(x.email)}</b><small>${html(x.id)}</small></td><td><span class="s ${html(x.status)}">${html(x.status)}</span></td><td>${Number(x.health_score??0)}</td><td><code>${html(x.project_id||"未解析")}</code></td><td>${html(time(x.access_token_expires_at))}</td><td>${html(time(x.cooldown_until))}</td><td><a href="/admin/accounts/${encodeURIComponent(x.id)}/quota" target="_blank">Quota</a></td></tr>`).join("");
+  const doc=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Antigravity Accounts</title>
+<style>
+body{margin:0;background:#0b1020;color:#e9eef8;font:14px system-ui,-apple-system,sans-serif}.wrap{max-width:1200px;margin:35px auto;padding:0 20px}h1{margin:0 0 4px;font-size:25px}.sub,small{display:block;color:#8996ad;font-size:12px}.top{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}.btn,a{color:#8db7ff;text-decoration:none}.btn{background:#2563eb;color:#fff;border-radius:9px;padding:9px 14px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.card,.panel{background:#121a2b;border:1px solid #27334d;border-radius:13px}.card{padding:16px}.num{font-size:25px;font-weight:700;margin-top:5px}.green{color:#46d39a}.yellow{color:#f6c85f}.red{color:#ff6b7a}.panel{overflow:auto}table{width:100%;min-width:900px;border-collapse:collapse}th,td{padding:13px 15px;text-align:left;border-bottom:1px solid #27334d}th{color:#8996ad;font-size:12px;background:#10182a}.s{padding:3px 8px;border-radius:99px;background:#29344a}.s.active{color:#46d39a;background:#12352c}.s.blocked{color:#ff6b7a;background:#3b2028}.s.cooldown{color:#f6c85f;background:#3b321d}code{color:#a9c7ff}.empty{text-align:center;padding:40px;color:#8996ad}@media(max-width:700px){.top{align-items:flex-start;flex-direction:column}.cards{grid-template-columns:repeat(2,1fr)}}
+</style><div class="wrap"><div class="top"><div><h1>Antigravity Accounts</h1><div class="sub">Google / Code Assist 账号池管理</div></div><div><a class="btn" href="/oauth/google/start">＋ 添加 Google 账号</a>　<a href="/admin/accounts">刷新</a></div></div>
+<div class="cards"><div class="card"><div class="sub">账号总数</div><div class="num">${a.length}</div></div><div class="card"><div class="sub">正常</div><div class="num green">${active}</div></div><div class="card"><div class="sub">冷却中</div><div class="num yellow">${cooldown}</div></div><div class="card"><div class="sub">已阻断</div><div class="num red">${blocked}</div></div></div>
+<div class="panel"><table><thead><tr><th>Google 账号</th><th>状态</th><th>健康度</th><th>Project</th><th>Token 到期</th><th>冷却结束</th><th>操作</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">暂无账号</td></tr>'}</tbody></table></div>
+<p class="sub">Token 不在页面展示，仅在 Worker / Durable Object 内加密保存。</p></div>`;
+  return new Response(doc,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+}
 function pool(env:Env){return env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default"));}
 async function poolPost(env:Env,path:string,body:unknown){
   return pool(env).fetch(`https://pool${path}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
@@ -112,21 +136,17 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     }
 
     if(u.pathname==="/admin/accounts"){
-      if(!(await admin(req,env))){
-        if(req.method==="GET"){
-          const html="<!doctype html><html><head><meta charset=\"utf-8\"><title>Antigravity Admin</title></head><body style=\"font-family:system-ui;max-width:700px;margin:60px auto;padding:20px\"><h2>Antigravity Admin</h2><p>请输入 ADMIN_API_KEY 查看账号登录状态。</p><form method=\"post\"><input name=\"admin_key\" type=\"password\" placeholder=\"ADMIN_API_KEY\" required style=\"width:70%;padding:10px\"><button style=\"padding:10px 18px\">登录</button></form></body></html>";
-          return new Response(html,{headers:{"content-type":"text/html; charset=utf-8"}});
-        }
-        if(req.method==="POST"){
-          const f=await req.formData(); const k=f.get("admin_key");
-          if(typeof k==="string"&&k===env.ADMIN_API_KEY){
-            const r=await poolGet(env,"/internal/accounts");
-            return new Response(await r.text(),{headers:{"content-type":"application/json; charset=utf-8"}});
-          }
+      if(req.method==="GET"&&await admin(req,env))return adminPage(env);
+      if(req.method==="GET"){
+        return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Antigravity Admin</title><style>body{margin:0;background:#0b1020;color:#e9eef8;font:15px system-ui;display:grid;place-items:center;min-height:100vh}.box{background:#121a2b;border:1px solid #27334d;border-radius:14px;padding:28px;width:min(390px,calc(100% - 40px));box-sizing:border-box}input,button{width:100%;box-sizing:border-box;padding:11px;margin-top:10px;border-radius:8px}input{background:#0b1020;color:#fff;border:1px solid #34415e}button{background:#2563eb;color:#fff;border:0;font-weight:600}</style><form class="box" method="post"><h2>Antigravity Admin</h2><div>账号池管理控制台</div><input name="admin_key" type="password" placeholder="ADMIN_API_KEY" required><button>登录</button></form>`,{headers:{"content-type":"text/html; charset=utf-8"}});
+      }
+      if(req.method==="POST"){
+        const f=await req.formData(), k=f.get("admin_key");
+        if(typeof k==="string"&&k===env.ADMIN_API_KEY){
+          return new Response(null,{status:303,headers:{"location":"/admin/accounts","set-cookie":`ag_admin=${await adminSession(env)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`,"cache-control":"no-store"}});
         }
         return new Response("unauthorized",{status:401});
       }
-      return poolGet(env,"/internal/accounts");
     }
     if(req.method==="GET"&&u.pathname==="/v1/models"){
       if(!admin(req,env))return new Response(JSON.stringify({error:{message:"unauthorized",type:"invalid_request_error"}}),{status:401,headers:{"content-type":"application/json"}});
