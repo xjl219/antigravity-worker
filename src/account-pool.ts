@@ -127,7 +127,7 @@ export class AccountPoolDO extends DurableObject<Env> {
     }
 
     if(req.method==="GET"&&p==="/internal/accounts"){
-      return Response.json(this.rows("SELECT id,email,project_id,status,health_score,failure_count,last_used_at,updated_at FROM accounts ORDER BY health_score DESC,last_used_at ASC"));
+      return Response.json(this.rows("SELECT id,email,project_id,status,health_score,failure_count,access_token_expires_at,cooldown_until,last_used_at,updated_at FROM accounts ORDER BY health_score DESC,last_used_at ASC"));
     }
 
     if(req.method==="POST"&&p==="/internal/allocate"){
