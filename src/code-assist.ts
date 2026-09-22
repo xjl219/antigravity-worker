@@ -58,6 +58,32 @@ export class CodeAssistClient{
     })).json<any>();
   }
 
+  async fetchAvailableModels(token:string,project?:string){
+    const endpoints=[
+      "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels",
+      "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
+      "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
+    ];
+    let last:Response|undefined;
+    const payload=project?{project}:{};
+    for(const endpoint of endpoints){
+      let body=payload;
+      let retryWithoutProject=false;
+      while(true){
+        const r=await fetch(endpoint,{method:"POST",headers:{
+          Authorization:"Bearer "+token,"Content-Type":"application/json",
+          "User-Agent":userAgent(this.env),"x-client-name":"antigravity","x-client-version":"4.3.0"
+        },body:JSON.stringify(body)});
+        if(r.ok)return r.json<any>();
+        last=r;
+        if(r.status===403&&project&&!retryWithoutProject){body={};retryWithoutProject=true;continue;}
+        if(![408,429,499].includes(r.status)&&r.status<500)break;
+        break;
+      }
+    }
+    throw new UpstreamError(last?.status??502,last?await last.text():"model catalog unavailable");
+  }
+
   async retrieveUserQuota(token:string,project?:string){
     let last:Response|undefined;
     for(const endpoint of QUOTA_ENDPOINTS){
