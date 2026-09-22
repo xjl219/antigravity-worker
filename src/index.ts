@@ -101,7 +101,6 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
         const form=await req.formData();
         const callback=form.get("callback_url");
         const st=form.get("state");
-        code=typeof callback==="string"?undefined:undefined;
         if(typeof callback==="string")({code,state}=parseOAuthCallback(callback));
         if(typeof st==="string"&&st)state=st;
         const k=form.get("admin_key"); adminKey=typeof k==="string"?k:undefined;
