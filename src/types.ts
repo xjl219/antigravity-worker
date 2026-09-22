@@ -1,8 +1,6 @@
 export interface Env {
   ACCOUNT_POOL: DurableObjectNamespace;
   ADMIN_API_KEY: string;
-  GOOGLE_CLIENT_ID: string;
-  GOOGLE_CLIENT_SECRET: string;
   TOKEN_ENCRYPTION_KEY: string;
   GOOGLE_CODE_ASSIST_BASE_URL: string;
   GOOGLE_OAUTH_REDIRECT_PATH: string;
