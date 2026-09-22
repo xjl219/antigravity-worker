@@ -128,6 +128,15 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       }
       return poolGet(env,"/internal/accounts");
     }
+    if(req.method==="GET"&&u.pathname==="/v1/models"){
+      if(!admin(req,env))return new Response(JSON.stringify({error:{message:"unauthorized",type:"invalid_request_error"}}),{status:401,headers:{"content-type":"application/json"}});
+      const now=Math.floor(Date.now()/1000);
+      return Response.json({
+        object:"list",
+        data:[{id:env.DEFAULT_MODEL,object:"model",created:now,owned_by:"google"}]
+      });
+    }
+
     if(req.method==="POST"&&u.pathname==="/v1/messages"){
       if(!admin(req,env))return new Response(JSON.stringify({type:"error",error:{type:"authentication_error",message:"unauthorized"}}),{status:401,headers:{"content-type":"application/json"}});
       const input=await req.json<AnthropicRequest>();
