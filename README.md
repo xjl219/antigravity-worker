@@ -583,6 +583,29 @@ GET /admin/accounts
 GET /admin/accounts/:id/quota
 ```
 
+### 实时调试
+
+打开：
+
+```text
+GET /admin/debug
+```
+
+这是生产排查用的实时调试台：
+
+- 实时显示客户端请求
+- 实时显示 Worker → Google 的实际模型、Project 和 request body
+- 实时显示 Google HTTP 状态、headers 和 response body
+- streaming 请求按 chunk 实时显示上游响应
+- 自动识别 400 / 401 / 403 / 429 / 5xx，并给出定位路径
+- 每次请求生成 x-antigravity-debug-id，可与客户端错误对应
+- Authorization / Cookie / API key / access token / refresh token / secret 自动脱敏
+- **不写 SQLite、不写 KV、不写 R2、不写日志；只通过 DebugBus Durable Object 内存中的 WebSocket 实时转发**
+- 刷新调试页、断开 WebSocket 后，页面历史立即消失
+
+调试页本身需要管理员会话，与账号管理页使用同一套鉴权。
+
+
 这些接口需要：
 
 ```http
