@@ -60,7 +60,7 @@ export function toInternal(input:ChatRequest,project:string,defaultModel:string)
 
 function sse(x:unknown){return `data: ${JSON.stringify(x)}\n\n`;}
 
-export function streamToOpenAI(body:ReadableStream<Uint8Array>,model:string,onSuccess?:()=>Promise<void>,onFailure?:()=>Promise<void>){
+export function streamToOpenAI(body:ReadableStream<Uint8Array>,model:string,onSuccess?:()=>Promise<void>,onFailure?:()=>Promise<void>,onChunk?:(chunk:Uint8Array)=>void){
   const dec=new TextDecoder(),enc=new TextEncoder();
   let buf="",role=false,chatId=`chatcmpl-${crypto.randomUUID()}`,created=Math.floor(Date.now()/1000);
   return new ReadableStream<Uint8Array>({
@@ -70,6 +70,7 @@ export function streamToOpenAI(body:ReadableStream<Uint8Array>,model:string,onSu
         try{
           for(;;){
             const {done,value}=await reader.read();if(done)break;
+            onChunk?.(value);
             buf+=dec.decode(value,{stream:true});
             const lines=buf.split(/\r?\n/);buf=lines.pop()??"";
             for(const line of lines){
