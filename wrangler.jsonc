@@ -10,11 +10,16 @@
   },
   "durable_objects": {
     "bindings": [
-      { "name": "ACCOUNT_POOL", "class_name": "AccountPoolDO" }
+      { "name": "ACCOUNT_POOL", "class_name": "AccountPoolDO" },
+      { "name": "DEBUG_BUS", "class_name": "DebugBusDO" }
     ]
   },
   "exports": {
     "AccountPoolDO": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "DebugBusDO": {
       "type": "durable-object",
       "storage": "sqlite"
     }
