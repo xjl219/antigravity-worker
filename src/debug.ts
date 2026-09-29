@@ -45,10 +45,14 @@ export function debugEvent(env:Env,event:DebugEvent){
     ts:event.ts??Date.now(),
   });
   if(payload.length>MAX_EVENT_BYTES){
+    const compact:Record<string,unknown>={...event,ts:event.ts??Date.now()};
+    for(const key of ["body","data","request","response"]){
+      if(key in compact)compact[key]=clip(compact[key]);
+    }
     return env.DEBUG_BUS.get(env.DEBUG_BUS.idFromName("default")).fetch("https://debug/internal/event",{
       method:"POST",
       headers:{"content-type":"application/json"},
-      body:JSON.stringify({...event,ts:event.ts??Date.now(),data:clip(event.data)})
+      body:JSON.stringify(compact)
     }).catch(()=>undefined);
   }
   return env.DEBUG_BUS.get(env.DEBUG_BUS.idFromName("default")).fetch("https://debug/internal/event",{
