@@ -24,6 +24,13 @@ function debugId(){return crypto.randomUUID();}
 function debugPayload(value:unknown){return redact(value);}
 async function debugBody(r:Response){try{return debugPayload(await r.clone().json())}catch{try{return (await r.clone().text()).slice(0,256*1024)}catch{return "[unreadable response]"}}}
 async function emitDebug(env:Env,event:Record<string,unknown>){await debugEvent(env,event);}
+function errorMessage(error:unknown){return error instanceof Error?error.message:String(error);}
+async function unexpectedDebugResponse(env:Env,traceId:string,error:unknown){
+  const message=errorMessage(error);
+  await emitDebug(env,{traceId,kind:"error",phase:"worker error",status:500,message});
+  await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:500,body:{error:{message:"internal worker error",type:"server_error"}}});
+  return Response.json({error:{message:"internal worker error",type:"server_error"}},{status:500,headers:{"x-antigravity-debug-id":traceId}});
+}
 async function adminPage(env:Env){
   const r=await poolGet(env,"/internal/accounts"), a=await r.json<any[]>();
   const normStatus=(v:unknown,cooldownUntil?:unknown)=>Number(cooldownUntil)>Date.now()?"COOLDOWN":String(v??"").toUpperCase();
@@ -271,13 +278,28 @@ connect();
       if(!input.messages?.length||!input.max_tokens)return new Response(JSON.stringify({type:"error",error:{type:"invalid_request_error",message:"messages and max_tokens are required"}}),{status:400,headers:{"content-type":"application/json"}});
       const traceId=debugId();
       await emitDebug(env,{traceId,kind:"request",phase:"client → worker",method:req.method,route:u.pathname,requestedModel:input.model,stream:!!input.stream,headers:redactHeaders(req.headers),body:debugPayload(input)});
-      let sessionId=req.headers.get("x-antigravity-session-id")||undefined; const failed:string[]=[]; let last:UpstreamError|undefined;
+      try{
+        let sessionId=req.headers.get("x-antigravity-session-id")||undefined; const failed:string[]=[]; let last:UpstreamError|undefined;
       for(let attempt=0;attempt<3;attempt++){
-        const a=await poolPost(env,"/internal/allocate",{session_id:sessionId,exclude_account_ids:failed}); if(!a.ok)return a;
+        await emitDebug(env,{traceId,kind:"account_allocation",phase:"worker → account pool",attempt:attempt+1,sessionId});
+        const a=await poolPost(env,"/internal/allocate",{session_id:sessionId,exclude_account_ids:failed});
+        if(!a.ok){
+          const body=await debugBody(a);
+          await emitDebug(env,{traceId,kind:"error",phase:"account allocation failed",status:a.status,body});
+          await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:a.status,body});
+          const response=new Response(typeof body==="string"?body:JSON.stringify(body),{status:a.status,headers:{"content-type":a.headers.get("content-type")??"application/json","x-antigravity-debug-id":traceId}});
+          return response;
+        }
         const account=await a.json<any>(); sessionId=account.session_id as string;
+        await emitDebug(env,{traceId,kind:"account_allocated",phase:"account pool → worker",accountId:account.account_id,email:account.email,project:account.project_id,sessionId});
          const currentSessionId=sessionId;
         const projectId=account.project_id as string;
-         if(!projectId)return new Response("account has no Code Assist project",{status:503});
+         if(!projectId){
+           const body="account has no Code Assist project";
+           await emitDebug(env,{traceId,kind:"error",phase:"account configuration error",status:503,accountId:account.account_id,email:account.email,body});
+           await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:503,body});
+           return new Response(body,{status:503,headers:{"x-antigravity-debug-id":traceId}});
+         }
         const internal=toAnthropicInternal(input,projectId,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64");
         try{
           await emitDebug(env,{traceId,kind:"upstream_request",phase:"worker → Google",accountId:account.account_id,email:account.email,project:projectId,requestedModel:input.model,model:internal.model,stream:!!input.stream,body:debugPayload(internal)});
@@ -298,7 +320,8 @@ connect();
           throw e;
         }
       }
-      return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:last?.body??"upstream unavailable"}}),{status:last?.status??503,headers:{"content-type":"application/json"}});
+      return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:last?.body??"upstream unavailable"}}),{status:last?.status??503,headers:{"content-type":"application/json","x-antigravity-debug-id":traceId}});
+      }catch(error){return unexpectedDebugResponse(env,traceId,error);}
     }
 
     if(req.method==="POST"&&u.pathname==="/v1/chat/completions"){
@@ -308,6 +331,7 @@ connect();
       const traceId=debugId();
       await emitDebug(env,{traceId,kind:"request",phase:"client → worker",method:req.method,route:u.pathname,requestedModel:input.model??env.DEFAULT_MODEL,stream:!!input.stream,headers:redactHeaders(req.headers),body:debugPayload(input)});
 
+      try{
       const requestedSession=req.headers.get("x-antigravity-session-id")||undefined;
       const maxAttempts=3;
       const failedAccounts:string[]=[];
@@ -315,19 +339,28 @@ connect();
       let sessionId=requestedSession;
 
       for(let attempt=0;attempt<maxAttempts;attempt++){
+        await emitDebug(env,{traceId,kind:"account_allocation",phase:"worker → account pool",attempt:attempt+1,sessionId});
         const a=await poolPost(env,"/internal/allocate",{
           session_id:sessionId,
           exclude_account_ids:failedAccounts
         });
         if(!a.ok){
-          if(lastError)return new Response(lastError.body,{status:lastError.status,headers:{"content-type":"application/json"}});
-          return a;
+          const body=await debugBody(a);
+          await emitDebug(env,{traceId,kind:"error",phase:"account allocation failed",status:a.status,body});
+          await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:a.status,body});
+          return new Response(typeof body==="string"?body:JSON.stringify(body),{status:a.status,headers:{"content-type":a.headers.get("content-type")??"application/json","x-antigravity-debug-id":traceId}});
         }
 
         const account=await a.json<any>();
+        await emitDebug(env,{traceId,kind:"account_allocated",phase:"account pool → worker",accountId:account.account_id,email:account.email,project:account.project_id,sessionId:account.session_id});
         const currentSessionId = account.session_id as string;
         sessionId=currentSessionId;
-        if(!account.project_id)return new Response("account has no Code Assist project",{status:503});
+        if(!account.project_id){
+          const body="account has no Code Assist project";
+          await emitDebug(env,{traceId,kind:"error",phase:"account configuration error",status:503,accountId:account.account_id,email:account.email,body});
+          await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:503,body});
+          return new Response(body,{status:503,headers:{"x-antigravity-debug-id":traceId}});
+        }
 
         const internal=toInternal(input,account.project_id,env.DEFAULT_MODEL);
         await emitDebug(env,{traceId,kind:"upstream_request",phase:"worker → Google",accountId:account.account_id,email:account.email,project:account.project_id,requestedModel:input.model??env.DEFAULT_MODEL,model:internal.model,stream:!!input.stream,body:debugPayload(internal)});
@@ -350,7 +383,8 @@ connect();
                 "content-type":"text/event-stream; charset=utf-8",
                 "cache-control":"no-cache",
                 "connection":"keep-alive",
-                "x-antigravity-session-id":currentSessionId
+                "x-antigravity-session-id":currentSessionId,
+                "x-antigravity-debug-id":traceId
               }
             });
           }
@@ -379,8 +413,11 @@ connect();
         }
       }
 
-      if(lastError)return new Response(lastError.body,{status:lastError.status,headers:{"content-type":"application/json"}});
-      return new Response("upstream unavailable",{status:503});
+      if(lastError)return new Response(lastError.body,{status:lastError.status,headers:{"content-type":"application/json","x-antigravity-debug-id":traceId}});
+      const body="upstream unavailable";
+      await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:503,body});
+      return new Response(body,{status:503,headers:{"x-antigravity-debug-id":traceId}});
+      }catch(error){return unexpectedDebugResponse(env,traceId,error);}
     }
 
     if(u.pathname.startsWith("/admin/accounts/")&&u.pathname.endsWith("/quota")){
