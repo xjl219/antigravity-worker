@@ -264,6 +264,11 @@ PUBLIC_BASE_URL
 
 客户端没有传 `model` 时使用的默认模型。
 
+`gemini-3.1-pro-high` 是兼容接口暴露的高推理别名。Worker 会在发往
+Code Assist 前将它路由为上游接受的 `gemini-pro-agent`，避免 Google 返回
+`400 INVALID_ARGUMENT`。调试信息会同时显示客户端请求的模型名和实际
+上游路由。
+
 当前：
 
 ```text

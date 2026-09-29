@@ -21,15 +21,20 @@ const MODEL_ALIASES:Record<string,string>={
   "claude-3-5-sonnet-20241022":"claude-sonnet-4-6",
   "claude-3-5-sonnet-20240620":"claude-sonnet-4-6",
   "claude-3-opus-20240229":"claude-opus-4-6-thinking",
-  "gpt-4":"gemini-3.1-pro-high",
-  "gpt-4-turbo":"gemini-3.1-pro-high",
-  "gpt-4-turbo-preview":"gemini-3.1-pro-high",
+  "gpt-4":"gemini-pro-agent",
+  "gpt-4-turbo":"gemini-pro-agent",
+  "gpt-4-turbo-preview":"gemini-pro-agent",
   "gpt-4o":"gemini-3-flash",
   "gpt-4o-mini":"gemini-2.5-flash",
   "gpt-3.5-turbo":"gemini-2.5-flash",
-  "o1":"gemini-3.1-pro-high",
-  "o3":"gemini-3.1-pro-high",
+  "o1":"gemini-pro-agent",
+  "o3":"gemini-pro-agent",
   "gemini-3-pro-high":"gemini-pro-agent",
+  // `gemini-3.1-pro-high` is a public compatibility alias, not a Code
+  // Assist generation model ID.  Sending it upstream returns
+  // INVALID_ARGUMENT; the high-reasoning Code Assist route is
+  // `gemini-pro-agent`.
+  "gemini-3.1-pro-high":"gemini-pro-agent",
   "gemini-3-pro":"gemini-3.1-pro-preview",
   "gemini-3-pro-preview":"gemini-3.1-pro-preview"
 };
