@@ -4,7 +4,9 @@ import {CodeAssistClient,UpstreamError} from "./code-assist";
 import {toInternal,streamToOpenAI,toOpenAI} from "./openai";
 import {toAnthropicInternal,anthropicResponse,anthropicStream} from "./anthropic";
 import type {Env,ChatRequest,AnthropicRequest} from "./types";
+import {debugEvent,redact,redactHeaders} from "./debug";
 export {AccountPoolDO} from "./account-pool";
+export {DebugBusDO} from "./debug";
 
 async function adminSession(env:Env){
   const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(env.ADMIN_API_KEY),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
@@ -18,6 +20,10 @@ async function admin(req:Request,env:Env){
 }
 function html(v:unknown){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");}
 function time(v:unknown){const n=Number(v);return Number.isFinite(n)&&n>0?new Date(n).toLocaleString("zh-CN",{hour12:false}):"—";}
+function debugId(){return crypto.randomUUID();}
+function debugPayload(value:unknown){return redact(value);}
+async function debugBody(r:Response){try{return debugPayload(await r.clone().json())}catch{try{return (await r.clone().text()).slice(0,256*1024)}catch{return "[unreadable response]"}}}
+async function emitDebug(env:Env,event:Record<string,unknown>){await debugEvent(env,event);}
 async function adminPage(env:Env){
   const r=await poolGet(env,"/internal/accounts"), a=await r.json<any[]>();
   const normStatus=(v:unknown,cooldownUntil?:unknown)=>Number(cooldownUntil)>Date.now()?"COOLDOWN":String(v??"").toUpperCase();
@@ -164,6 +170,70 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
         return new Response("unauthorized",{status:401});
       }
     }
+    if(u.pathname==="/admin/debug/ws"){
+      if(!await admin(req,env))return new Response("unauthorized",{status:401});
+      if(req.headers.get("Upgrade")?.toLowerCase()!=="websocket")return new Response("Expected WebSocket",{status:426});
+      return env.DEBUG_BUS.get(env.DEBUG_BUS.idFromName("default")).fetch(new Request("https://debug/ws",{method:"GET",headers:req.headers}));
+    }
+
+    if(u.pathname==="/admin/debug"){
+      if(!await admin(req,env))return new Response("unauthorized",{status:401});
+      const doc=String.raw`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>实时调试 · Antigravity</title>
+<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#070b13;color:#edf3ff;font:13px/1.5 system-ui,-apple-system,sans-serif}.shell{width:min(1500px,calc(100% - 28px));margin:20px auto}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:14px}.brand{display:flex;align-items:center;gap:11px}.logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#4f7cff,#8b5cf6);display:grid;place-items:center;font-weight:800}.h1{font-size:20px;font-weight:760}.muted{color:#7f8da5;font-size:11px}.actions{display:flex;gap:7px;align-items:center}.btn{border:1px solid #2b3b56;background:#111b2c;color:#c8d8f5;border-radius:9px;padding:8px 11px;cursor:pointer;text-decoration:none}.btn.primary{background:#2563eb;border-color:#3b82f6;color:#fff}.status{padding:6px 10px;border-radius:99px;background:#2a1d0e;color:#f5c66d;border:1px solid #57411d}.status.ok{background:#10372e;color:#55ddb0;border-color:#1f5e4e}.layout{display:grid;grid-template-columns:360px 1fr;gap:13px}.panel{background:#0e1624;border:1px solid #22314a;border-radius:14px;overflow:hidden}.panel h3{margin:0;padding:12px 14px;border-bottom:1px solid #22314a;font-size:13px}.diag{padding:13px}.diag .item{padding:10px 11px;border-radius:9px;background:#0a111d;border:1px solid #1d2b40;margin-bottom:8px}.diag .item b{display:block;margin-bottom:3px}.diag .ok{border-color:#245544}.diag .bad{border-color:#6a2d3a}.diag .warn{border-color:#5b4820}.hint{color:#9eb0ca}.events{height:calc(100vh - 125px);overflow:auto;padding:10px}.event{border:1px solid #22314a;background:#0a111d;border-radius:11px;margin-bottom:9px;overflow:hidden}.event-head{display:flex;align-items:center;gap:7px;padding:8px 10px;border-bottom:1px solid #1c293d;cursor:pointer}.badge{font-size:10px;font-weight:800;padding:3px 7px;border-radius:99px;background:#1c2c49;color:#b8d0ff}.badge.req{background:#26304c}.badge.up{background:#19374a;color:#8fd8ff}.badge.res{background:#173b31;color:#75e2bb}.badge.err{background:#45232c;color:#ff9eaa}.badge.final{background:#30264c;color:#c7a8ff}.time{margin-left:auto;color:#667792;font:10px ui-monospace,monospace}.event-title{font-weight:650}.event-body{padding:10px;display:none}.event.open .event-body{display:block}.event pre{margin:0;white-space:pre-wrap;word-break:break-word;color:#b9c7dc;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;max-height:520px;overflow:auto}.meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;color:#73839c;font-size:10px}.trace{font-family:ui-monospace,monospace;color:#9fc0ff}.empty{padding:55px;text-align:center;color:#718098}.notice{padding:10px 13px;border-bottom:1px solid #22314a;background:#111a2a;color:#91a0b7;font-size:11px}@media(max-width:900px){.layout{grid-template-columns:1fr}.events{height:65vh}}</style></head>
+<body><main class="shell"><div class="top"><div class="brand"><div class="logo">A</div><div><div class="h1">实时请求调试</div><div class="muted">Request → Antigravity → Response · 内存实时流，不落盘</div></div></div><div class="actions"><span id="status" class="status">连接中…</span><button id="pause" class="btn">暂停</button><button id="clear" class="btn">清空</button><a class="btn primary" href="/admin/accounts">账号池</a></div></div>
+<div class="notice">调试内容仅通过 WebSocket 实时推送到当前页面，DebugBus 不写 SQLite/Cache/R2；刷新或断开后历史立即丢失。Authorization、Cookie、API key、token 等字段自动脱敏。</div>
+<div class="layout"><aside class="panel"><h3>问题定位</h3><div id="diag" class="diag"><div class="empty">等待请求…</div></div></aside><section class="panel"><h3>实时事件 <span id="count" class="muted">0</span></h3><div id="events" class="events"><div id="empty" class="empty">等待 API 请求进入…</div></div></section></div></main>
+<script>
+const eventsEl=document.getElementById("events"),diagEl=document.getElementById("diag"),statusEl=document.getElementById("status"),countEl=document.getElementById("count"),emptyEl=document.getElementById("empty");
+let paused=false,count=0,last=null;
+const esc=v=>String(v??"").replace(/[&<>"']/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[s]));
+function pretty(v){if(typeof v==="string"){try{return JSON.stringify(JSON.parse(v),null,2)}catch{return v}}try{return JSON.stringify(v,null,2)}catch{return String(v)}}
+function diagnose(e){
+  const text=JSON.stringify(e);
+  const items=[];
+  if(e.kind==="error"||e.phase==="error"){
+    const st=Number(e.status||0), body=text;
+    if(st===400&&/INVALID_ARGUMENT|invalid argument/i.test(body))items.push(["bad","400 INVALID_ARGUMENT","优先检查 mapped model、Gemini request schema、tool/function schema；展开 UPSTREAM_REQUEST 看实际发送的 model 和 request。"]);
+    else if(st===400)items.push(["warn","400 请求参数","检查模型名、消息 role、thinking/tool 参数以及字段类型。"]);
+    else if(st===401)items.push(["bad","401 认证失败","检查 Google access token 是否过期、刷新是否成功，以及账号是否仍有 Code Assist 权限。"]);
+    else if(st===403)items.push(["bad","403 权限/Project","检查 Code Assist project、账号授权范围和上游权限；看 UPSTREAM_REQUEST 的 project。"]);
+    else if(st===429)items.push(["warn","429 限流/额度","检查账号额度与冷却状态；必要时查看账号额度页。"]);
+    else if(st>=500)items.push(["warn",String(st)+" 上游服务错误","先看 UPSTREAM_RESPONSE；如果连续多个账号失败，再检查 Google 上游或网络。"]);
+    if(/function.*name|invalid.*tool|tool.*schema/i.test(body))items.push(["warn","Tool Schema","重点检查 function name、input schema、tool choice；400 常发生在工具定义转换阶段。"]);
+  }
+  if(e.kind==="upstream_request"&&e.model)items.push(["ok","模型路由","客户端模型： "+(e.requestedModel||"—")+" → 实际上游模型： "+e.model]);
+  if(e.kind==="upstream_response"&&Number(e.status)===200)items.push(["ok","上游已接受","Google 返回 HTTP 200，继续检查响应内容转换。"]);
+  if(e.kind==="response"&&Number(e.status)>=400)items.push(["bad","最终响应 "+e.status,"结合同一 traceId 向上查看最近的 UPSTREAM_REQUEST / UPSTREAM_RESPONSE / ERROR。"]);
+  if(!items.length)items.push(["","等待诊断","产生 400/401/403/429/5xx 时，这里会给出对应定位路径。"]);
+  diagEl.innerHTML=items.map(x=>'<div class="item '+x[0]+'"><b>'+esc(x[1])+'</b><span class="hint">'+esc(x[2])+'</span></div>').join("");
+}
+function add(e){
+  if(paused)return;
+  count++;countEl.textContent=count;last=e;diagnose(e);emptyEl?.remove();
+  const kind=String(e.kind||"event"), cls=kind==="error"?"err":kind==="response"?"final":kind.includes("upstream")?"up":kind==="request"?"req":"";
+  const el=document.createElement("article");el.className="event open";
+  const title=e.phase||kind;
+  const body={...e};delete body.kind;delete body.ts;
+  el.innerHTML='<div class="event-head"><span class="badge '+cls+'">'+esc(kind)+'</span><span class="event-title">'+esc(title)+'</span><span class="time">'+new Date(Number(e.ts||Date.now())).toLocaleTimeString("zh-CN",{hour12:false})+'</span></div><div class="meta" style="padding:0 10px 8px">trace <span class="trace">'+esc(e.traceId||"—")+'</span>'+(e.status?' · HTTP '+esc(e.status):"")+(e.model?' · '+esc(e.model):"")+'</div><div class="event-body"><pre>'+esc(pretty(body))+'</pre></div>';
+  el.querySelector(".event-head").onclick=()=>el.classList.toggle("open");
+  eventsEl.prepend(el);
+  while(eventsEl.children.length>120)eventsEl.lastElementChild.remove();
+}
+function connect(){
+  const proto=location.protocol==="https:"?"wss:":"ws:";
+  const ws=new WebSocket(proto+"//"+location.host+"/admin/debug/ws");
+  ws.onopen=()=>{statusEl.textContent="实时连接";statusEl.className="status ok"};
+  ws.onclose=()=>{statusEl.textContent="已断开 · 重连中";statusEl.className="status";setTimeout(connect,1200)};
+  ws.onerror=()=>{statusEl.textContent="连接错误";statusEl.className="status"};
+  ws.onmessage=e=>{try{add(JSON.parse(e.data))}catch{}};
+}
+document.getElementById("pause").onclick=e=>{paused=!paused;e.target.textContent=paused?"继续":"暂停"};
+document.getElementById("clear").onclick=()=>{eventsEl.innerHTML="";count=0;countEl.textContent="0";diagEl.innerHTML='<div class="empty">等待请求…</div>'};
+connect();
+</script></body></html>`;
+      return new Response(doc,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+    }
+
     if(req.method==="GET"&&u.pathname==="/v1/models"){
       if(!await admin(req,env))return new Response(JSON.stringify({error:{message:"unauthorized",type:"invalid_request_error"}}),{status:401,headers:{"content-type":"application/json"}});
       // Match Antigravity Tools v4.7.11: dynamic quota models + built-in aliases/variants.
@@ -199,6 +269,8 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(!await admin(req,env))return new Response(JSON.stringify({type:"error",error:{type:"authentication_error",message:"unauthorized"}}),{status:401,headers:{"content-type":"application/json"}});
       const input=await req.json<AnthropicRequest>();
       if(!input.messages?.length||!input.max_tokens)return new Response(JSON.stringify({type:"error",error:{type:"invalid_request_error",message:"messages and max_tokens are required"}}),{status:400,headers:{"content-type":"application/json"}});
+      const traceId=debugId();
+      await emitDebug(env,{traceId,kind:"request",phase:"client → worker",method:req.method,route:u.pathname,requestedModel:input.model,stream:!!input.stream,headers:redactHeaders(req.headers),body:debugPayload(input)});
       let sessionId=req.headers.get("x-antigravity-session-id")||undefined; const failed:string[]=[]; let last:UpstreamError|undefined;
       for(let attempt=0;attempt<3;attempt++){
         const a=await poolPost(env,"/internal/allocate",{session_id:sessionId,exclude_account_ids:failed}); if(!a.ok)return a;
@@ -207,7 +279,10 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
         const projectId=account.project_id as string;
          if(!projectId)return new Response("account has no Code Assist project",{status:503});
         try{
-          const upstream=await new CodeAssistClient(env).generate(account.access_token,toAnthropicInternal(input,projectId,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64"),!!input.stream);
+          const internal=toAnthropicInternal(input,projectId,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64");
+          await emitDebug(env,{traceId,kind:"upstream_request",phase:"worker → Google",accountId:account.account_id,email:account.email,project:projectId,requestedModel:input.model,model:internal.model,stream:!!input.stream,body:debugPayload(internal)});
+          const upstream=await new CodeAssistClient(env).generate(account.access_token,internal,!!input.stream);
+          await emitDebug(env,{traceId,kind:"upstream_response",phase:"Google → worker",status:upstream.status,headers:redactHeaders(upstream.headers),model:internal.model});
           if(input.stream){
             const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:currentSessionId});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:502});});
             return new Response(stream,{headers:{"content-type":"text/event-stream","cache-control":"no-cache","x-antigravity-session-id":currentSessionId}});
@@ -226,6 +301,8 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(!await admin(req,env))return new Response("unauthorized",{status:401});
       const input=await req.json<ChatRequest>();
       if(!input.messages?.length)return new Response("messages is required",{status:400});
+      const traceId=debugId();
+      await emitDebug(env,{traceId,kind:"request",phase:"client → worker",method:req.method,route:u.pathname,requestedModel:input.model??env.DEFAULT_MODEL,stream:!!input.stream,headers:redactHeaders(req.headers),body:debugPayload(input)});
 
       const requestedSession=req.headers.get("x-antigravity-session-id")||undefined;
       const maxAttempts=3;
@@ -249,17 +326,20 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
         if(!account.project_id)return new Response("account has no Code Assist project",{status:503});
 
         const internal=toInternal(input,account.project_id,env.DEFAULT_MODEL);
+        await emitDebug(env,{traceId,kind:"upstream_request",phase:"worker → Google",accountId:account.account_id,email:account.email,project:account.project_id,requestedModel:input.model??env.DEFAULT_MODEL,model:internal.model,stream:!!input.stream,body:debugPayload(internal)});
         const client=new CodeAssistClient(env);
 
         try{
           const upstream=await client.generate(account.access_token,internal,!!input.stream);
+          await emitDebug(env,{traceId,kind:"upstream_response",phase:"Google → worker",status:upstream.status,headers:redactHeaders(upstream.headers),model:internal.model});
 
           if(input.stream){
             const stream=streamToOpenAI(
               upstream.body!,
               internal.model,
-              async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});},
-              async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});}
+              async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});await emitDebug(env,{traceId,kind:"response",phase:"Google stream → client",status:200,model:internal.model,stream:true});},
+              async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});await emitDebug(env,{traceId,kind:"error",phase:"stream conversion error",status:502,message:"stream response conversion failed"});},
+              chunk=>{void emitDebug(env,{traceId,kind:"upstream_chunk",phase:"Google stream chunk",model:internal.model,data:new TextDecoder().decode(chunk).slice(0,256*1024)});}
             );
             return new Response(stream,{
               headers:{
@@ -272,8 +352,12 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
           }
 
           await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});
+          const raw=await debugBody(upstream);
+          await emitDebug(env,{traceId,kind:"upstream_body",phase:"Google response body",status:upstream.status,model:internal.model,body:raw});
           const response=await toOpenAI(upstream,internal.model);
           response.headers.set("x-antigravity-session-id",currentSessionId);
+          response.headers.set("x-antigravity-debug-id",traceId);
+          await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:response.status,model:internal.model,body:await debugBody(response)});
           return response;
         }catch(e){
           if(e instanceof UpstreamError){
@@ -281,7 +365,10 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
             await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:e.status});
             failedAccounts.push(account.account_id);
             if(retryable(e.status)&&attempt<maxAttempts-1)continue;
-            return new Response(e.body,{status:e.status,headers:{"content-type":"application/json"}});
+            await emitDebug(env,{traceId,kind:"error",phase:"Google error",status:e.status,model:internal.model,body:e.body,accountId:account.account_id,email:account.email});
+            const err=new Response(e.body,{status:e.status,headers:{"content-type":"application/json","x-antigravity-debug-id":traceId}});
+            await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:e.status,model:internal.model,body:e.body});
+            return err;
           }
           await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:sessionId,status:502});
           throw e;
