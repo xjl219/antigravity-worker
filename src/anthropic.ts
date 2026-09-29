@@ -193,7 +193,8 @@ export function anthropicStream(
   body:ReadableStream<Uint8Array>,
   requestedModel:string,
   onSuccess?:()=>Promise<void>,
-  onFailure?:()=>Promise<void>
+  onFailure?:()=>Promise<void>,
+  onChunk?:(chunk:Uint8Array)=>void
 ){
   const dec=new TextDecoder(),enc=new TextEncoder();
   const id="msg_"+crypto.randomUUID().replaceAll("-","");
@@ -234,6 +235,7 @@ export function anthropicStream(
           for(;;){
             const {done,value}=await reader.read();
             if(done)break;
+            onChunk?.(value);
             buf+=dec.decode(value,{stream:true});
             const lines=buf.split(/\r?\n/);buf=lines.pop()??"";
             for(const line of lines){
