@@ -39,7 +39,7 @@ export function redactHeaders(headers:Headers){
   return out;
 }
 
-export function debugEvent(env:Env,event:DebugEvent){
+export function debugEvent(env:Env,event:Record<string,unknown>){
   const payload=JSON.stringify({
     ...event,
     ts:event.ts??Date.now(),
