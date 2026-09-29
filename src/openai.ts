@@ -6,6 +6,39 @@ function text(c:ChatRequest["messages"][number]["content"]){
 
 const DEFAULT_UA="Antigravity/4.3.0 (X11; Linux x86_64) Chrome/132.0.6834.160 Electron/39.2.3";
 
+const MODEL_ALIASES:Record<string,string>={
+  "claude-sonnet-4-6":"claude-sonnet-4-6",
+  "claude-sonnet-4-6-thinking":"claude-sonnet-4-6-thinking",
+  "claude-sonnet-4-5":"claude-sonnet-4-6",
+  "claude-sonnet-4-5-thinking":"claude-sonnet-4-6-thinking",
+  "claude-opus-4":"claude-opus-4-6-thinking",
+  "claude-opus-4-5-thinking":"claude-opus-4-6-thinking",
+  "claude-opus-4-6":"claude-opus-4-6-thinking",
+  "claude-opus-4-6-thinking":"claude-opus-4-6-thinking",
+  "claude-haiku-4":"claude-sonnet-4-6-thinking",
+  "claude-haiku-4-5":"claude-sonnet-4-6",
+  "claude-3-haiku-20240307":"claude-sonnet-4-6-thinking",
+  "claude-3-5-sonnet-20241022":"claude-sonnet-4-6",
+  "claude-3-5-sonnet-20240620":"claude-sonnet-4-6",
+  "claude-3-opus-20240229":"claude-opus-4-6-thinking",
+  "gpt-4":"gemini-3.1-pro-high",
+  "gpt-4-turbo":"gemini-3.1-pro-high",
+  "gpt-4-turbo-preview":"gemini-3.1-pro-high",
+  "gpt-4o":"gemini-3-flash",
+  "gpt-4o-mini":"gemini-2.5-flash",
+  "gpt-3.5-turbo":"gemini-2.5-flash",
+  "o1":"gemini-3.1-pro-high",
+  "o3":"gemini-3.1-pro-high",
+  "gemini-3-pro-high":"gemini-pro-agent",
+  "gemini-3-pro":"gemini-3.1-pro-preview",
+  "gemini-3-pro-preview":"gemini-3.1-pro-preview"
+};
+
+function modelMap(model:string){
+  const key=model.trim().toLowerCase();
+  return MODEL_ALIASES[key]??model;
+}
+
 export function toInternal(input:ChatRequest,project:string,defaultModel:string):InternalGenerateRequest{
   const system=input.messages.filter(x=>x.role==="system").map(x=>text(x.content)).filter(Boolean).join("\n\n");
   const contents=input.messages.filter(x=>x.role!=="system"&&x.role!=="tool").map(x=>({
@@ -18,7 +51,7 @@ export function toInternal(input:ChatRequest,project:string,defaultModel:string)
   return {
     requestId:`agent/${Date.now()}/${crypto.randomUUID().replaceAll("-","").slice(0,8)}`,
     userAgent:DEFAULT_UA,
-    model:input.model??defaultModel,project,request:{
+    model:modelMap(input.model??defaultModel),project,request:{
       contents,...(system?{systemInstruction:{parts:[{text:system}]}}:{}),
       ...(Object.keys(generationConfig).length?{generationConfig}:{})
     }
