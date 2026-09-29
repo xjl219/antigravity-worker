@@ -1,5 +1,6 @@
 export interface Env {
   ACCOUNT_POOL: DurableObjectNamespace;
+  DEBUG_BUS: DurableObjectNamespace;
   ADMIN_API_KEY: string;
   TOKEN_ENCRYPTION_KEY: string;
   GOOGLE_CODE_ASSIST_BASE_URL: string;
