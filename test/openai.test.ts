@@ -12,6 +12,13 @@ describe("OpenAI adapter",()=>{
     expect(x.project).toBe("p"); expect(x.request.systemInstruction?.parts[0].text).toBe("be concise");
     expect(x.request.contents[1].role).toBe("model");
   });
+
+  it("routes high-reasoning compatibility aliases to Code Assist",()=>{
+    for(const model of ["gemini-3.1-pro-high","o1","o3","gpt-4","gpt-4-turbo","gpt-4-turbo-preview"]){
+      const x=toInternal({model,messages:[{role:"user",content:"hello"}]},"p","gemini-2.5-flash");
+      expect(x.model).toBe("gemini-pro-agent");
+    }
+  });
 });
 
 describe("Account health",()=>{
