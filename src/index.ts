@@ -284,13 +284,17 @@ connect();
           const upstream=await new CodeAssistClient(env).generate(account.access_token,internal,!!input.stream);
           await emitDebug(env,{traceId,kind:"upstream_response",phase:"Google → worker",status:upstream.status,headers:redactHeaders(upstream.headers),model:internal.model});
           if(input.stream){
-            const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:currentSessionId});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:502});});
-            return new Response(stream,{headers:{"content-type":"text/event-stream","cache-control":"no-cache","x-antigravity-session-id":currentSessionId}});
+            const stream=anthropicStream(upstream.body!,input.model,async()=>{await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:currentSessionId});await emitDebug(env,{traceId,kind:"response",phase:"Google stream → client",status:200,model:internal.model,stream:true});},async()=>{await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:502});await emitDebug(env,{traceId,kind:"error",phase:"stream conversion error",status:502,message:"stream response conversion failed"});},chunk=>{void emitDebug(env,{traceId,kind:"upstream_chunk",phase:"Google stream chunk",model:internal.model,data:new TextDecoder().decode(chunk).slice(0,256*1024)});});
+            return new Response(stream,{headers:{"content-type":"text/event-stream","cache-control":"no-cache","x-antigravity-session-id":currentSessionId,"x-antigravity-debug-id":traceId}});
           }
           await poolPost(env,"/internal/success",{account_id:account.account_id,session_id:sessionId});
-          const out=Response.json(anthropicResponse(await upstream.json(),input.model)); out.headers.set("x-antigravity-session-id",sessionId); return out;
+          const raw=await debugBody(upstream);
+          await emitDebug(env,{traceId,kind:"upstream_body",phase:"Google response body",status:upstream.status,model:internal.model,body:raw});
+          const out=Response.json(anthropicResponse(typeof raw==="string"?JSON.parse(raw):raw,input.model)); out.headers.set("x-antigravity-session-id",sessionId); out.headers.set("x-antigravity-debug-id",traceId);
+          await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:out.status,model:internal.model,body:await debugBody(out)});
+          return out;
         }catch(e){
-          if(e instanceof UpstreamError){last=e;await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:e.status});failed.push(account.account_id);if((e.status===401||e.status===403||e.status===429||e.status>=500)&&attempt<2)continue;return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:e.body}}),{status:e.status,headers:{"content-type":"application/json"}});}
+          if(e instanceof UpstreamError){last=e;await poolPost(env,"/internal/failure",{account_id:account.account_id,session_id:currentSessionId,status:e.status});failed.push(account.account_id);await emitDebug(env,{traceId,kind:"error",phase:"Google error",status:e.status,model:internal.model,body:e.body,accountId:account.account_id,email:account.email});if((e.status===401||e.status===403||e.status===429||e.status>=500)&&attempt<2)continue;return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:e.body}}),{status:e.status,headers:{"content-type":"application/json","x-antigravity-debug-id":traceId}});}
           throw e;
         }
       }
