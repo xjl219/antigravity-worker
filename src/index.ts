@@ -278,8 +278,8 @@ connect();
          const currentSessionId=sessionId;
         const projectId=account.project_id as string;
          if(!projectId)return new Response("account has no Code Assist project",{status:503});
+        const internal=toAnthropicInternal(input,projectId,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64");
         try{
-          const internal=toAnthropicInternal(input,projectId,env.ANTIGRAVITY_USER_AGENT||"antigravity/2.0.3 linux/amd64");
           await emitDebug(env,{traceId,kind:"upstream_request",phase:"worker → Google",accountId:account.account_id,email:account.email,project:projectId,requestedModel:input.model,model:internal.model,stream:!!input.stream,body:debugPayload(internal)});
           const upstream=await new CodeAssistClient(env).generate(account.access_token,internal,!!input.stream);
           await emitDebug(env,{traceId,kind:"upstream_response",phase:"Google → worker",status:upstream.status,headers:redactHeaders(upstream.headers),model:internal.model});
