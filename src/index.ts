@@ -97,6 +97,16 @@ async function completeOAuth(_req:Request,env:Env,code:string,state:string):Prom
 export default {async fetch(req:Request,env:Env):Promise<Response>{
   const u=new URL(req.url);
   try{
+    // The login page is the only unauthenticated route. Browser pages redirect
+    // to login; API calls get a JSON authentication error instead of a raw page.
+    const loginRoute=u.pathname==="/admin/accounts";
+    if(!loginRoute&&!await admin(req,env)){
+      const accept=req.headers.get("accept")||"";
+      if(u.pathname.startsWith("/v1/")||accept.includes("application/json")){
+        return Response.json({error:{message:"请先登录",type:"authentication_error"}},{status:401,headers:{"cache-control":"no-store"}});
+      }
+      return Response.redirect(new URL("/admin/accounts?error=login",req.url),303);
+    }
     if(req.method==="GET"&&u.pathname==="/health"){
       const cf=(req as Request&{cf?:{colo?:string;city?:string;country?:string}}).cf;
       return Response.json({ok:true,service:"antigravity-worker",time:new Date().toISOString(),placement:req.headers.get("cf-placement"),colo:cf?.colo??null,city:cf?.city??null,country:cf?.country??null});
@@ -177,18 +187,22 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     if(u.pathname==="/admin/accounts"){
       if(req.method==="GET"&&await admin(req,env))return adminPage(env);
       if(req.method==="GET"){
-        return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Antigravity Admin</title><style>body{margin:0;background:#0b1020;color:#e9eef8;font:15px system-ui;display:grid;place-items:center;min-height:100vh}.box{background:#121a2b;border:1px solid #27334d;border-radius:14px;padding:28px;width:min(390px,calc(100% - 40px));box-sizing:border-box}input,button{width:100%;box-sizing:border-box;padding:11px;margin-top:10px;border-radius:8px}input{background:#0b1020;color:#fff;border:1px solid #34415e}button{background:#2563eb;color:#fff;border:0;font-weight:600}</style><form class="box" method="post"><h2>Antigravity Admin</h2><div>账号池管理控制台</div><input name="admin_key" type="password" placeholder="ADMIN_API_KEY" required><button>登录</button></form>`,{headers:{"content-type":"text/html; charset=utf-8"}});
+        return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Antigravity Admin</title><style>body{margin:0;background:#0b1020;color:#e9eef8;font:15px system-ui;display:grid;place-items:center;min-height:100vh}.box{background:#121a2b;border:1px solid #27334d;border-radius:14px;padding:28px;width:min(390px,calc(100% - 40px));box-sizing:border-box}input,button{width:100%;box-sizing:border-box;padding:11px;margin-top:10px;border-radius:8px}input{background:#0b1020;color:#fff;border:1px solid #34415e}button{background:#2563eb;color:#fff;border:0;font-weight:600}</style><form class="box" method="post"><h2>Antigravity Admin</h2><div>账号池管理控制台</div><div style="display:${u.searchParams.get("error")==="password"||u.searchParams.get("error")==="login"?"block":"none"};margin-top:12px;padding:10px 12px;border:1px solid #7b3040;background:#351a24;color:#ff9ca8;border-radius:8px">密码错误，请重新输入管理员密码。</div><input name="admin_key" type="password" placeholder="管理员密码" autocomplete="current-password" required autofocus><button>登录</button></form>`,{headers:{"content-type":"text/html; charset=utf-8"}});
       }
       if(req.method==="POST"){
         const f=await req.formData(), k=f.get("admin_key");
         if(typeof k==="string"&&k===env.ADMIN_API_KEY){
           return new Response(null,{status:303,headers:{"location":"/admin/accounts","set-cookie":`ag_admin=${await adminSession(env)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`,"cache-control":"no-store"}});
         }
-        return new Response("unauthorized",{status:401});
+        return new Response(null,{status:303,headers:{"location":"/admin/accounts?error=password","cache-control":"no-store"}});
       }
     }
+    if(u.pathname==="/admin/chat"){
+      return Response.redirect(new URL("/admin/test",req.url),303);
+    }
+
     if(u.pathname==="/admin/test"){
-      if(!await admin(req,env))return new Response("unauthorized",{status:401});
+      
       const doc=String.raw`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>API 测试台 · Antigravity</title>
 <style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#070b13;color:#edf3ff;font:13px/1.5 system-ui,-apple-system,sans-serif}.shell{width:min(1400px,calc(100% - 28px));margin:20px auto}.top{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:14px}.brand{display:flex;align-items:center;gap:11px}.logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#4f7cff,#8b5cf6);display:grid;place-items:center;font-weight:800}.h1{font-size:20px;font-weight:760}.muted{color:#7f8da5;font-size:11px}.actions{display:flex;gap:7px}.btn{border:1px solid #2b3b56;background:#111b2c;color:#c8d8f5;border-radius:9px;padding:8px 11px;cursor:pointer;text-decoration:none}.btn.primary{background:#2563eb;border-color:#3b82f6;color:#fff}.grid{display:grid;grid-template-columns:440px 1fr;gap:13px}.panel{background:#0e1624;border:1px solid #22314a;border-radius:14px;overflow:hidden}.panel h3{margin:0;padding:12px 14px;border-bottom:1px solid #22314a}.body{padding:13px}.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}.field{margin-bottom:10px}.field label{display:block;color:#8999b3;font-size:11px;margin-bottom:5px}.input,.area,select{width:100%;border:1px solid #293a56;background:#0a111d;color:#eaf1ff;border-radius:9px;padding:9px 10px;outline:none}.area{min-height:250px;resize:vertical;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}.small{min-height:110px}.tabs{display:flex;gap:6px;margin-bottom:10px}.tab{padding:7px 10px;border:1px solid #293a56;background:#0b1320;color:#9eb0ca;border-radius:8px;cursor:pointer}.tab.active{background:#1d4ed8;color:#fff;border-color:#3b82f6}.actions2{display:flex;gap:8px;flex-wrap:wrap}.send{background:#2563eb;border:1px solid #3b82f6;color:#fff;border-radius:9px;padding:9px 14px;font-weight:700;cursor:pointer}.ghost{background:#111b2c;border:1px solid #2b3b56;color:#c8d8f5;border-radius:9px;padding:9px 12px;cursor:pointer}.check{display:flex;align-items:center;gap:7px;color:#a9b8ce;margin:8px 0}.status{display:inline-block;padding:4px 8px;border-radius:99px;background:#242d3e;color:#aebbd0}.status.ok{background:#10372e;color:#55ddb0}.status.bad{background:#45232c;color:#ff9eaa}.meta{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px}.out{min-height:560px;display:flex;flex-direction:column}.out pre{flex:1;margin:0;padding:13px;white-space:pre-wrap;word-break:break-word;overflow:auto;font:11px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;color:#c8d4e7}.hint{color:#8292ab;font-size:11px}.placement{padding:9px 11px;border:1px solid #243650;background:#0a111d;border-radius:9px;margin-bottom:10px}.placement b{color:#dbe7ff}@media(max-width:900px){.grid{grid-template-columns:1fr}.row{grid-template-columns:1fr}.out{min-height:420px}}</style></head>
 <body><main class="shell"><div class="top"><div class="brand"><div class="logo">A</div><div><div class="h1">API 测试台</div><div class="muted">OpenAI / Anthropic / Models / Health · 实时请求响应，不存储</div></div></div><div class="actions"><a class="btn" href="/admin/debug">实时调试</a><a class="btn" href="/admin/accounts">账号池</a></div></div>
