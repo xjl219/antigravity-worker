@@ -590,6 +590,23 @@ GET /admin/accounts
 GET /admin/accounts/:id/quota
 ```
 
+### API 测试台
+
+打开：
+
+    GET /admin/test
+
+测试台提供：
+
+- OpenAI `/v1/chat/completions`
+- Anthropic `/v1/messages`
+- `/v1/models`
+- `/health`
+- 非流式 / Streaming
+- 实时显示 HTTP 状态、耗时、debug id
+- Health 页面显示 Cloudflare colo / Placement 信息
+- 请求与响应仅在当前浏览器页面实时展示，不保存测试记录
+
 ### 实时调试
 
 打开：
