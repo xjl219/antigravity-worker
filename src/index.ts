@@ -53,6 +53,13 @@ async function poolPost(env:Env,path:string,body:unknown){
 }
 async function poolGet(env:Env,path:string){return pool(env).fetch(`https://pool${path}`);}
 
+function allocationHeaders(response:Response){
+  const headers=new Headers({"content-type":response.headers.get("content-type")??"application/json"});
+  const retryAfter=response.headers.get("retry-after");
+  if(retryAfter)headers.set("retry-after",retryAfter);
+  return headers;
+}
+
 function retryable(status:number){return status===401||status===403||status===429||status>=500;}
 
 function parseOAuthCallback(value:string):{code?:string;state?:string}{
@@ -286,8 +293,14 @@ connect();
         if(!a.ok){
           const body=await debugBody(a);
           await emitDebug(env,{traceId,kind:"error",phase:"account allocation failed",status:a.status,body});
+          if(last){
+            const response=new Response(JSON.stringify({type:"error",error:{type:"api_error",message:last.body}}),{status:last.status,headers:{"content-type":"application/json","x-antigravity-debug-id":traceId}});
+            await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:last.status,body:last.body});
+            return response;
+          }
           await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:a.status,body});
-          const response=new Response(typeof body==="string"?body:JSON.stringify(body),{status:a.status,headers:{"content-type":a.headers.get("content-type")??"application/json","x-antigravity-debug-id":traceId}});
+          const headers=allocationHeaders(a); headers.set("x-antigravity-debug-id",traceId);
+          const response=new Response(typeof body==="string"?body:JSON.stringify(body),{status:a.status,headers});
           return response;
         }
         const account=await a.json<any>(); sessionId=account.session_id as string;
@@ -347,8 +360,14 @@ connect();
         if(!a.ok){
           const body=await debugBody(a);
           await emitDebug(env,{traceId,kind:"error",phase:"account allocation failed",status:a.status,body});
+          if(lastError){
+            const response=new Response(lastError.body,{status:lastError.status,headers:{"content-type":"application/json","x-antigravity-debug-id":traceId}});
+            await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:lastError.status,body:lastError.body});
+            return response;
+          }
           await emitDebug(env,{traceId,kind:"response",phase:"worker → client",status:a.status,body});
-          return new Response(typeof body==="string"?body:JSON.stringify(body),{status:a.status,headers:{"content-type":a.headers.get("content-type")??"application/json","x-antigravity-debug-id":traceId}});
+          const headers=allocationHeaders(a); headers.set("x-antigravity-debug-id",traceId);
+          return new Response(typeof body==="string"?body:JSON.stringify(body),{status:a.status,headers});
         }
 
         const account=await a.json<any>();

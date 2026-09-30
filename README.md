@@ -523,6 +523,8 @@ Worker 不直接把 refresh token 返回给客户端。
 
 认证失败（HTTP 401）会将账号标记为 `BLOCKED`，需要重新授权或在管理页确认后恢复。HTTP 403 也可能由模型或项目权限造成，因此只会进入短暂冷却，不会永久阻断整个账号池。管理页的 **恢复** 按钮可立即清除现有 `BLOCKED` 或冷却状态，以便在修正请求模型/项目配置后重试。
 
+当账号池无法分配账号时，接口会返回 `account_unavailable` 诊断，而不是笼统的 `no healthy account`。返回中的 `blocked`、`cooling_down` 和 `retry_after_seconds` 分别说明账号是否需要重新授权/恢复、是否只是暂时冷却，以及建议的重试时间。Google Code Assist 额度余额不会绕过 OAuth 凭据失效、账号阻断或请求冷却；请先根据这些字段在管理页处理对应账号。
+
 ---
 
 # 19. OpenAI 兼容接口
