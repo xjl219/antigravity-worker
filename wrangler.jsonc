@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-18",
   "compatibility_flags": ["nodejs_compat"],
+  "placement": {
+    "region": "gcp:us-central1"
+  },
   "vars": {
     "GOOGLE_CODE_ASSIST_BASE_URL": "https://daily-cloudcode-pa.googleapis.com",
     "DEFAULT_MODEL": "gemini-2.5-flash"
