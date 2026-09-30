@@ -105,7 +105,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(u.pathname.startsWith("/v1/")||accept.includes("application/json")){
         return Response.json({error:{message:"请先登录",type:"authentication_error"}},{status:401,headers:{"cache-control":"no-store"}});
       }
-      return Response.redirect(new URL("/admin/accounts?error=login",req.url),303);
+      return Response.redirect(new URL("/admin/accounts?error=login",req.url).toString(),303);
     }
     if(req.method==="GET"&&u.pathname==="/health"){
       const cf=(req as Request&{cf?:{colo?:string;city?:string;country?:string}}).cf;
