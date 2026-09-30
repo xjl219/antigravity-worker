@@ -99,6 +99,26 @@ export class AccountPoolDO extends DurableObject<Env> {
     )[0];
   }
 
+  private unavailableResponse(excluded:string[],now:number){
+    const accounts=this.rows<Pick<AccountRow,"status"|"cooldown_until">>("SELECT status,cooldown_until FROM accounts");
+    const cooling=accounts.filter(a=>a.status==="ACTIVE"&&a.cooldown_until>now);
+    const blocked=accounts.filter(a=>a.status==="BLOCKED");
+    const retryAt=cooling.length?Math.min(...cooling.map(a=>a.cooldown_until)):undefined;
+    const retryAfter=retryAt?Math.max(1,Math.ceil((retryAt-now)/1000)):undefined;
+    const message=accounts.length===0
+      ? "no accounts are configured"
+      : blocked.length===accounts.length
+        ? "all accounts are blocked; reauthorize or reactivate an account"
+        : cooling.length===accounts.length
+          ? "all accounts are temporarily cooling down"
+          : "no eligible account is available";
+    return Response.json({
+      error:{type:"account_unavailable",message},
+      accounts:{total:accounts.length,blocked:blocked.length,cooling_down:cooling.length,excluded:excluded.length},
+      ...(retryAfter?{retry_after_seconds:retryAfter}: {})
+    },{status:503,headers:retryAfter?{"retry-after":String(retryAfter)}:undefined});
+  }
+
   async fetch(req:Request){
     this.init();
     const u=new URL(req.url),p=u.pathname;
@@ -179,7 +199,7 @@ export class AccountPoolDO extends DurableObject<Env> {
       }
 
       const a=this.chooseAccount(excluded,x.preferred_account_id);
-      if(!a)return new Response("no healthy account",{status:503});
+      if(!a)return this.unavailableResponse(excluded,now);
       try{
         const {access,expiresAt}=await this.refreshAccess(a);
         const sessionId=x.session_id||randomBase64Url(24);
