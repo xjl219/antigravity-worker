@@ -107,7 +107,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(u.pathname.startsWith("/v1/")||accept.includes("application/json")){
         return Response.json({error:{message:"请先登录",type:"authentication_error"}},{status:401,headers:{"cache-control":"no-store"}});
       }
-      return Response.redirect(new URL("/admin/accounts?error=login",req.url).toString(),303);
+      return Response.redirect(new URL("/accounts?error=login",req.url).toString(),303);
     }
     if(req.method==="GET"&&u.pathname==="/health"){
       const cf=(req as Request&{cf?:{colo?:string;city?:string;country?:string}}).cf;
@@ -168,22 +168,22 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       return completeOAuth(req,env,code,state);
     }
 
-    if(u.pathname.startsWith("/admin/accounts/")&&u.pathname.endsWith("/delete")&&req.method==="POST"){
+    if((u.pathname.startsWith("/admin/accounts/")||u.pathname.startsWith("/accounts/"))&&u.pathname.endsWith("/delete")&&req.method==="POST"){
       if(!await admin(req,env))return new Response("unauthorized",{status:401});
       const id=decodeURIComponent(u.pathname.split("/")[3]||"");
       if(!id)return new Response("account id is required",{status:400});
       const r=await pool(env).fetch(`https://pool/internal/account/${encodeURIComponent(id)}`,{method:"DELETE"});
       if(!r.ok)return new Response(await r.text(),{status:r.status});
-      return new Response(null,{status:303,headers:{"location":"/admin/accounts","cache-control":"no-store"}});
+      return new Response(null,{status:303,headers:{"location":"/accounts","cache-control":"no-store"}});
     }
 
-    if(u.pathname.startsWith("/admin/accounts/")&&u.pathname.endsWith("/reactivate")&&req.method==="POST"){
+    if((u.pathname.startsWith("/admin/accounts/")||u.pathname.startsWith("/accounts/"))&&u.pathname.endsWith("/reactivate")&&req.method==="POST"){
       if(!await admin(req,env))return new Response("unauthorized",{status:401});
       const id=decodeURIComponent(u.pathname.split("/")[3]||"");
       if(!id)return new Response("account id is required",{status:400});
       const r=await poolPost(env,`/internal/account/${encodeURIComponent(id)}/reactivate`,{});
       if(!r.ok)return new Response(await r.text(),{status:r.status});
-      return new Response(null,{status:303,headers:{"location":"/admin/accounts","cache-control":"no-store"}});
+      return new Response(null,{status:303,headers:{"location":"/accounts","cache-control":"no-store"}});
     }
 
     if((u.pathname==="/admin/accounts"||u.pathname==="/accounts")){
@@ -194,9 +194,9 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
       if(req.method==="POST"){
         const f=await req.formData(), k=f.get("admin_key");
         if(typeof k==="string"&&k===env.ADMIN_API_KEY){
-          return new Response(null,{status:303,headers:{"location":"/admin/accounts","set-cookie":`ag_admin=${await adminSession(env)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`,"cache-control":"no-store"}});
+          return new Response(null,{status:303,headers:{"location":"/accounts","set-cookie":`ag_admin=${await adminSession(env)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`,"cache-control":"no-store"}});
         }
-        return new Response(null,{status:303,headers:{"location":"/admin/accounts?error=password","cache-control":"no-store"}});
+        return new Response(null,{status:303,headers:{"location":"/accounts?error=password","cache-control":"no-store"}});
       }
     }
     if((u.pathname==="/admin/gemini"||u.pathname==="/chat")){
@@ -531,7 +531,7 @@ connect();
       }catch(error){return unexpectedDebugResponse(env,traceId,error);}
     }
 
-    if(u.pathname.startsWith("/admin/accounts/")&&u.pathname.endsWith("/quota")){
+    if((u.pathname.startsWith("/admin/accounts/")||u.pathname.startsWith("/accounts/"))&&u.pathname.endsWith("/quota")){
       if(!await admin(req,env))return new Response("unauthorized",{status:401});
       const id=decodeURIComponent(u.pathname.split("/")[3]||"");
       const accounts=await (await poolGet(env,"/internal/accounts")).json<any[]>();
