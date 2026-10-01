@@ -223,10 +223,37 @@ function openChat(cid){const c=chats.find(x=>x.id===cid);if(!c)return;currentId=
 function ensureChat(first){let c=current();if(c)return c;c={id:id(),title:titleFor(first),messages:[],created:Date.now(),updated:Date.now()};chats.unshift(c);currentId=c.id;return c}
 function saveChat(c){const i=chats.findIndex(x=>x.id===c.id);if(i>=0)chats.splice(i,1);chats.unshift(c);c.updated=Date.now();save();renderHistory()}
 function resize(){promptEl.style.height="auto";promptEl.style.height=Math.min(promptEl.scrollHeight,180)+"px"}
-async function loadModels(){try{const r=await fetch("/v1/models",{cache:"no-store"}),x=await r.json();if(!r.ok)throw new Error(x?.error?.message||JSON.stringify(x));modelEl.innerHTML="";for(const m of x.data||[]){const o=document.createElement("option");o.value=m.id;o.textContent=m.id;modelEl.appendChild(o)}stateEl.textContent=(x.data||[]).length+" 个模型"}catch(e){stateEl.textContent="模型加载失败"}}
-async function send(){if(busy)return;const text=promptEl.value.trim();if(!text)return;if(!modelEl.value||modelEl.value==="加载模型…"||modelEl.value==="Loading models..."){stateEl.textContent="模型尚未加载完成，请稍候";return;}const c=ensureChat(text);c.messages.push({role:"user",content:text});saveChat(c);renderMessages(c.messages);promptEl.value="";resize();busy=true;sendEl.disabled=false;sendEl.classList.add("stop");sendEl.textContent="■";stateEl.textContent="生成中…";const b=addMessage("assistant","",true);let answer="";aborter=new AbortController();try{const r=await fetch("/v1/chat/completions",{method:"POST",headers:{"content-type":"application/json"},signal:aborter.signal,body:JSON.stringify({model:modelEl.value,messages:c.messages,stream:true})});debugEl.textContent="debug "+(r.headers.get("x-antigravity-debug-id")||"—");if(!r.ok)throw new Error(await r.text());if(!r.body)throw new Error("empty response body");const rd=r.body.getReader(),dec=new TextDecoder();let buf="";for(;;){const q=await rd.read();if(q.done)break;buf+=dec.decode(q.value,{stream:true});const lines=buf.split(/\\r?\\n/);buf=lines.pop()||"";for(const line of lines){const z=line.trim();if(!z.startsWith("data:"))continue;const d=z.slice(5).trim();if(!d||d==="[DONE]")continue;try{const x=JSON.parse(d),t=x.choices?.[0]?.delta?.content||"";if(t){answer+=t;b.innerHTML=markdown(answer);requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight)}}catch{}}}if(buf.trim().startsWith("data:")){const d=buf.trim().slice(5).trim();if(d&&d!=="[DONE]"){try{const x=JSON.parse(d),t=x.choices?.[0]?.delta?.content||"";if(t){answer+=t;b.innerHTML=markdown(answer);requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight)}}catch{}}}c.messages.push({role:"assistant",content:answer});saveChat(c);stateEl.textContent="就绪"}catch(e){if(e.name==="AbortError"){stateEl.textContent="已停止"}else{b.classList.add("err");b.textContent="请求失败："+(e.message||e);debugEl.textContent="";stateEl.textContent="请求失败"}}finally{busy=false;aborter=null;sendEl.classList.remove("stop");sendEl.textContent="↑";promptEl.focus()}}
+async function loadModels(){
+  try{
+    const r=await fetch("/v1/models",{method:"GET",credentials:"same-origin",cache:"no-store",headers:{"accept":"application/json"}});
+    const x=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(x?.error?.message||("HTTP "+r.status));
+    const models=Array.isArray(x.data)?x.data:[];
+    modelEl.innerHTML="";
+    for(const m of models){
+      if(!m?.id)continue;
+      const o=document.createElement("option");
+      o.value=String(m.id);o.textContent=String(m.id);
+      modelEl.appendChild(o);
+    }
+    if(!modelEl.options.length){
+      const o=document.createElement("option");
+      o.value="gemini-2.5-flash";o.textContent="gemini-2.5-flash";
+      modelEl.appendChild(o);
+    }
+    stateEl.textContent="就绪 · "+modelEl.options.length+" 个模型";
+  }catch(e){
+    modelEl.innerHTML='<option value="gemini-2.5-flash">gemini-2.5-flash</option>';
+    stateEl.textContent="模型列表读取失败，已使用默认模型";
+  }
+}
+async function send(){if(busy)return;const text=promptEl.value.trim();if(!text)return;if(!modelEl.value||modelEl.value==="加载模型…"||modelEl.value==="Loading models..."){stateEl.textContent="模型尚未加载完成，请稍候";return;}const c=ensureChat(text);c.messages.push({role:"user",content:text});saveChat(c);renderMessages(c.messages);promptEl.value="";resize();busy=true;sendEl.disabled=false;sendEl.classList.add("stop");sendEl.textContent="■";stateEl.textContent="生成中…";const b=addMessage("assistant","",true);let answer="";aborter=new AbortController();try{const r=await fetch("/v1/chat/completions",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json","accept":"text/event-stream"},signal:aborter.signal,body:JSON.stringify({model:modelEl.value||"gemini-2.5-flash",messages:c.messages,stream:true})});debugEl.textContent="debug "+(r.headers.get("x-antigravity-debug-id")||"—");if(!r.ok)throw new Error(await r.text());if(!r.body)throw new Error("empty response body");const rd=r.body.getReader(),dec=new TextDecoder();let buf="";for(;;){const q=await rd.read();if(q.done)break;buf+=dec.decode(q.value,{stream:true});const lines=buf.split(/\\r?\\n/);buf=lines.pop()||"";for(const line of lines){const z=line.trim();if(!z.startsWith("data:"))continue;const d=z.slice(5).trim();if(!d||d==="[DONE]")continue;try{const x=JSON.parse(d),t=x.choices?.[0]?.delta?.content||"";if(t){answer+=t;b.innerHTML=markdown(answer);requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight)}}catch{}}}if(buf.trim().startsWith("data:")){const d=buf.trim().slice(5).trim();if(d&&d!=="[DONE]"){try{const x=JSON.parse(d),t=x.choices?.[0]?.delta?.content||"";if(t){answer+=t;b.innerHTML=markdown(answer);requestAnimationFrame(()=>messagesEl.scrollTop=messagesEl.scrollHeight)}}catch{}}}c.messages.push({role:"assistant",content:answer});saveChat(c);stateEl.textContent="就绪"}catch(e){if(e.name==="AbortError"){stateEl.textContent="已停止"}else{b.classList.add("err");b.textContent="请求失败："+(e.message||e);debugEl.textContent="";stateEl.textContent="请求失败"}}finally{busy=false;aborter=null;sendEl.classList.remove("stop");sendEl.textContent="↑";promptEl.focus()}}
 function clearCurrent(){const c=current();if(c){chats=chats.filter(x=>x.id!==c.id);save()}newChat()}
-document.getElementById("newChat").onclick=newChat;document.getElementById("clear").onclick=clearCurrent;sendEl.onclick=()=>busy?aborter?.abort():send();promptEl.addEventListener("input",resize);promptEl.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});document.getElementById("openSide").onclick=()=>{sidebar.classList.add("open");overlay.classList.add("show")};document.getElementById("closeSide").onclick=()=>{sidebar.classList.remove("open");overlay.classList.remove("show")};overlay.onclick=()=>{sidebar.classList.remove("open");overlay.classList.remove("show")};document.getElementById("attach").onclick=()=>{stateEl.textContent="当前版本暂不支持附件上传";setTimeout(()=>{if(!busy)stateEl.textContent="就绪"},1800)};load();renderHistory();loadModels();promptEl.focus();
+document.getElementById("newChat").onclick=newChat;
+document.getElementById("clear").onclick=clearCurrent;
+sendEl.type="button";
+sendEl.addEventListener("click",(event)=>{event.preventDefault();if(busy){aborter?.abort();}else{void send();}});
+promptEl.addEventListener("input",resize);promptEl.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});document.getElementById("openSide").onclick=()=>{sidebar.classList.add("open");overlay.classList.add("show")};document.getElementById("closeSide").onclick=()=>{sidebar.classList.remove("open");overlay.classList.remove("show")};overlay.onclick=()=>{sidebar.classList.remove("open");overlay.classList.remove("show")};document.getElementById("attach").onclick=()=>{stateEl.textContent="当前版本暂不支持附件上传";setTimeout(()=>{if(!busy)stateEl.textContent="就绪"},1800)};load();renderHistory();loadModels();promptEl.focus();
 </script></body></html>`;
       return new Response(doc,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
     }
