@@ -1,0 +1,6 @@
+
+> antigravity-worker@0.1.0 check
+> tsc --noEmit
+
+src/index.ts(104,80): error TS1127: Invalid character.
+src/index.ts(104,81): error TS1434: Unexpected keyword or identifier.
