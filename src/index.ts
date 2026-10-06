@@ -101,7 +101,8 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
   try{
     // The login page is the only unauthenticated route. Browser pages redirect
     // to login; API calls get a JSON authentication error instead of a raw page.
-    const shortUiPath=/^\/(accounts|chat|test|debug)(?:\/|$)/.test(u.pathname);\n    const loginRoute=u.pathname==="/admin/accounts"||u.pathname==="/accounts";
+    const shortUiPath=/^\/(accounts|chat|test|debug)(?:\/|$)/.test(u.pathname);
+    const loginRoute=u.pathname==="/admin/accounts"||u.pathname==="/accounts";
     if(!loginRoute&&!await admin(req,env)){
       const accept=req.headers.get("accept")||"";
       if(u.pathname.startsWith("/v1/")||accept.includes("application/json")){
