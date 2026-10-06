@@ -209,7 +209,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
 const modelEl=document.getElementById("model"),messagesEl=document.getElementById("messages"),promptEl=document.getElementById("prompt"),sendEl=document.getElementById("send"),stateEl=document.getElementById("state"),debugEl=document.getElementById("debug"),historyEl=document.getElementById("history"),sidebar=document.getElementById("sidebar"),overlay=document.getElementById("overlay");
 let chats=[],currentId=null,busy=false,aborter=null;
 const esc=v=>String(v??"").replace(/[&<>"']/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[s]));
-function markdown(s){let x=esc(s);x=x.replace(/~~~([\\s\\S]*?)~~~/g,(_,v)=>"<pre><code>"+v+"</code></pre>");x=x.replace(/^### (.*)$/gm,"<h3>$1</h3>").replace(/^## (.*)$/gm,"<h3>$1</h3>").replace(/^# (.*)$/gm,"<h3>$1</h3>").replace(/\\*\\*(.+?)\\*\\*/g,"<strong>$1</strong>").replace(/\\n\\n+/g,"</p><p>").replace(/\\n/g,"<br>");return "<p>"+x+"</p>".replace(/<p><\\/p>/g,"")}
+function markdown(s){let x=esc(s);x=x.replace(/~~~([\\s\\S]*?)~~~/g,(_,v)=>"<pre><code>"+v+"</code></pre>");x=x.replace(/^### (.*)$/gm,"<h3>$1</h3>").replace(/^## (.*)$/gm,"<h3>$1</h3>").replace(/^# (.*)$/gm,"<h3>$1</h3>").replace(/\\*\\*(.+?)\\*\\*/g,"<strong>$1</strong>").replace(/\\n\\n+/g,"</p><p>").replace(/\\n/g,"<br>");return "<p>"+x+"</p>".replace(/<p><\/p>/g,"")}
 function id(){return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,7)}
 function save(){try{localStorage.setItem("ag_gemini_chats",JSON.stringify(chats.slice(0,30)))}catch{}}
 function load(){try{const x=JSON.parse(localStorage.getItem("ag_gemini_chats")||"[]");if(Array.isArray(x))chats=x}catch{}}
