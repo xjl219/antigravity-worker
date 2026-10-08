@@ -112,7 +112,7 @@ export default {async fetch(req:Request,env:Env):Promise<Response>{
     }
     if(req.method==="GET"&&u.pathname==="/health"){
       const cf=(req as Request&{cf?:{colo?:string;city?:string;country?:string}}).cf;
-      return Response.json({ok:true,service:"antigravity-worker",time:new Date().toISOString(),placement:req.headers.get("cf-placement"),colo:cf?.colo??null,city:cf?.city??null,country:cf?.country??null});
+      return Response.json({ok:true,service:"antigravity-worker",time:new Date().toISOString(),placement:req.headers.get("cf-placement"),colo:cf?.colo??null,city:cf?.city??null,country:cf?.country??null,cfRay:req.headers.get("cf-ray"),cfPlacement:req.headers.get("cf-placement")});
     }
 
     if(u.pathname==="/oauth/google/start"){
