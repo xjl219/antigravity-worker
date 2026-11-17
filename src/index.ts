@@ -409,7 +409,7 @@ connect();
       ids.add("gemini-3.1-pro-high");
       ids.add("gemini-3.1-pro-low");
       const data=[...ids].sort().map(id=>({id,object:"model",created:1706745600,owned_by:"antigravity"}));
-      return Response.json({object:"list",data});
+      return Response.json({object:"list",data},{headers:{"cache-control":"no-store"}});
     }
 
     if(req.method==="POST"&&u.pathname==="/v1/messages"){
