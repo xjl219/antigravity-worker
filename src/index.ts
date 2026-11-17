@@ -287,17 +287,33 @@ promptEl.addEventListener("input",resize);promptEl.addEventListener("keydown",e=
 <script>
 const modelEl=document.getElementById("model"),promptEl=document.getElementById("prompt"),jsonEl=document.getElementById("json"),streamEl=document.getElementById("stream"),out=document.getElementById("out"),httpEl=document.getElementById("http"),timeEl=document.getElementById("time"),debugEl=document.getElementById("debug"),placementEl=document.getElementById("placement");
 let api="openai";
-const openaiBody=()=>({model:modelEl.value||"gemini-2.5-flash",messages:[{role:"user",content:promptEl.value}],stream:streamEl.checked});
-const anthropicBody=()=>({model:modelEl.value||"gemini-2.5-flash",max_tokens:256,messages:[{role:"user",content:promptEl.value}],stream:streamEl.checked});
+const DEFAULT_MODEL="gemini-2.5-flash";
+const openaiBody=()=>({model:modelEl.value||DEFAULT_MODEL,messages:[{role:"user",content:promptEl.value}],stream:streamEl.checked});
+const anthropicBody=()=>({model:modelEl.value||DEFAULT_MODEL,max_tokens:256,messages:[{role:"user",content:promptEl.value}],stream:streamEl.checked});
+function syncModelToRequest(){
+  try{const x=JSON.parse(jsonEl.value);x.model=modelEl.value||DEFAULT_MODEL;jsonEl.value=JSON.stringify(x,null,2)}catch{}
+}
 function reset(){jsonEl.value=JSON.stringify(api==="openai"?openaiBody():anthropicBody(),null,2)}
+modelEl.addEventListener("change",syncModelToRequest);
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");api=b.dataset.api;reset()});
-promptEl.oninput=()=>{try{const x=JSON.parse(jsonEl.value);x.messages[0].content=promptEl.value;jsonEl.value=JSON.stringify(x,null,2)}catch{}};
+promptEl.oninput=()=>{try{const x=JSON.parse(jsonEl.value);if(!Array.isArray(x.messages)||!x.messages.length)x.messages=[{role:"user",content:promptEl.value}];else x.messages[0].content=promptEl.value;jsonEl.value=JSON.stringify(x,null,2)}catch{}};
 streamEl.onchange=()=>{try{const x=JSON.parse(jsonEl.value);x.stream=streamEl.checked;jsonEl.value=JSON.stringify(x,null,2)}catch{}};
-async function models(){const r=await fetch("/v1/models",{cache:"no-store"});const x=await r.json();if(!r.ok)throw new Error(JSON.stringify(x));modelEl.innerHTML="";(x.data||[]).forEach(m=>{const o=document.createElement("option");o.value=m.id;o.textContent=m.id;modelEl.appendChild(o)});reset()}
+async function models(){
+  const selected=modelEl.value||DEFAULT_MODEL;
+  const r=await fetch("/v1/models?live=1",{credentials:"same-origin",cache:"no-store",headers:{"accept":"application/json"}});
+  const x=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(x?.error?.message||("HTTP "+r.status));
+  const models=Array.isArray(x.data)?x.data.filter(m=>m&&m.id):[];
+  if(!models.length)throw new Error("Live model catalog returned no models");
+  modelEl.replaceChildren();
+  for(const m of models){const o=document.createElement("option");o.value=String(m.id);o.textContent=String(m.id);modelEl.appendChild(o)}
+  modelEl.value=models.some(m=>m.id===selected)?selected:String(models[0].id);
+  syncModelToRequest();
+}
 document.getElementById("models").onclick=async()=>{out.textContent="加载模型…";try{await models();out.textContent="模型列表已刷新："+[...modelEl.options].map(x=>x.value).join("\\n")}catch(e){out.textContent=String(e)}};
 document.getElementById("health").onclick=async()=>{const t=performance.now();try{const r=await fetch("/health",{cache:"no-store"});const x=await r.json();placementEl.innerHTML="<b>Health / Placement</b><br>HTTP "+r.status+" · colo="+(x.colo||"—")+" · placement="+(x.placement||"—")+" · city="+(x.city||"—")+" · country="+(x.country||"—");httpEl.textContent="HTTP "+r.status;httpEl.className="status "+(r.ok?"ok":"bad");timeEl.textContent=Math.round(performance.now()-t)+" ms";out.textContent=JSON.stringify(x,null,2)}catch(e){out.textContent=String(e)}};
 document.getElementById("reset").onclick=reset;
-document.getElementById("send").onclick=async()=>{const t=performance.now();out.textContent="发送中…\\n";httpEl.textContent="请求中";httpEl.className="status";try{const body=JSON.parse(jsonEl.value);const path=api==="openai"?"/v1/chat/completions":"/v1/messages";const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const debug=r.headers.get("x-antigravity-debug-id");debugEl.textContent="debug "+(debug||"—");let text="";if(body.stream&&r.body){const reader=r.body.getReader(),dec=new TextDecoder();while(true){const {value,done}=await reader.read();if(done)break;text+=dec.decode(value,{stream:true});out.textContent=text;out.scrollTop=out.scrollHeight}}else{text=await r.text();try{out.textContent=JSON.stringify(JSON.parse(text),null,2)}catch{out.textContent=text}}httpEl.textContent="HTTP "+r.status;httpEl.className="status "+(r.ok?"ok":"bad");timeEl.textContent=Math.round(performance.now()-t)+" ms";}catch(e){httpEl.textContent="CLIENT ERROR";httpEl.className="status bad";out.textContent=String(e);timeEl.textContent=Math.round(performance.now()-t)+" ms"}};
+document.getElementById("send").onclick=async()=>{const t=performance.now();out.textContent="发送中…\\n";httpEl.textContent="请求中";httpEl.className="status";try{const body=JSON.parse(jsonEl.value);body.model=modelEl.value||DEFAULT_MODEL;const path=api==="openai"?"/v1/chat/completions":"/v1/messages";const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const debug=r.headers.get("x-antigravity-debug-id");debugEl.textContent="debug "+(debug||"—");let text="";if(body.stream&&r.body){const reader=r.body.getReader(),dec=new TextDecoder();while(true){const {value,done}=await reader.read();if(done)break;text+=dec.decode(value,{stream:true});out.textContent=text;out.scrollTop=out.scrollHeight}}else{text=await r.text();try{out.textContent=JSON.stringify(JSON.parse(text),null,2)}catch{out.textContent=text}}httpEl.textContent="HTTP "+r.status;httpEl.className="status "+(r.ok?"ok":"bad");timeEl.textContent=Math.round(performance.now()-t)+" ms";}catch(e){httpEl.textContent="CLIENT ERROR";httpEl.className="status bad";out.textContent=String(e);timeEl.textContent=Math.round(performance.now()-t)+" ms"}};
 models().catch(()=>reset());reset();
 </script></body></html>`;
       return new Response(doc,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
