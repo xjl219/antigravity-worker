@@ -1,5 +1,6 @@
 import {CodeAssistClient,UpstreamError} from "./code-assist";
 import {toInternal} from "./openai";
+import {geminiSchema} from "./anthropic";
 import type {Env,ChatRequest,InternalGenerateRequest,GeminiPart} from "./types";
 
 type ResponseInputItem = Record<string,any>;
@@ -63,9 +64,12 @@ export function buildInternal(input:ResponsesRequest,project:string,defaultModel
   const tools=(input.tools??[]).filter(t=>t?.type==="function").map(t=>({
     name:String(t.name??t.function?.name??""),
     description:String(t.description??t.function?.description??""),
-    parameters:t.parameters??t.function?.parameters??{type:"object",properties:{}}
+    parameters:geminiSchema(t.parameters??t.function?.parameters??{type:"object",properties:{}})
   })).filter(t=>t.name);
-  if(tools.length)base.request.tools=[{functionDeclarations:tools}];
+  if(tools.length){
+    base.request.tools=[{functionDeclarations:tools}];
+    base.request.toolConfig={functionCallingConfig:{mode:"AUTO"}};
+  }
   if(input.tool_choice&&typeof input.tool_choice==="object"&&(input.tool_choice as any).type==="function"){
     base.request.toolConfig={functionCallingConfig:{mode:"ANY",allowedFunctionNames:[(input.tool_choice as any).name]}};
   }else if(input.tool_choice==="none"){
