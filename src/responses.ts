@@ -181,7 +181,9 @@ export async function handleResponses(req:Request,env:Env):Promise<Response>{
     const allocation=await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/allocate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({session_id:sessionId,exclude_account_ids:failed})});
     if(!allocation.ok)return new Response(last?.body??await allocation.text(),{status:last?.status??allocation.status,headers:{"content-type":"application/json","x-antigravity-debug-id":traceId}});
     const account=await allocation.json<any>();
-    sessionId=account.session_id;
+    const currentSessionId=String(account.session_id??sessionId??"");
+    if(!currentSessionId)return Response.json({error:{message:"account pool returned no session id",type:"server_error"}},{status:503});
+    sessionId=currentSessionId;
     if(!account.project_id)return Response.json({error:{message:"account has no Code Assist project",type:"server_error"}},{status:503});
     let internal:InternalGenerateRequest;
     try{internal=buildInternal(input,account.project_id,env.DEFAULT_MODEL);}catch(e){return invalid(e instanceof Error?e.message:String(e));}
@@ -189,12 +191,12 @@ export async function handleResponses(req:Request,env:Env):Promise<Response>{
       const upstream=await new CodeAssistClient(env).generate(account.access_token,internal,!!input.stream);
       if(input.stream){
         const stream=streamResponse(upstream.body!,responseModel,respId,
-          async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/success",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:sessionId})});},
-          async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/failure",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:sessionId,status:502})});});
-        return new Response(stream,{headers:{"content-type":"text/event-stream; charset=utf-8","cache-control":"no-cache","x-antigravity-session-id":sessionId,"x-antigravity-debug-id":traceId}});
+          async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/success",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:currentSessionId})});},
+          async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/failure",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:currentSessionId,status:502})});});
+        return new Response(stream,{headers:{"content-type":"text/event-stream; charset=utf-8","cache-control":"no-cache","x-antigravity-session-id":currentSessionId,"x-antigravity-debug-id":traceId}});
       }
       const raw=await upstream.json();
-      await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/success",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:sessionId})});
+      await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/success",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:currentSessionId})});
       const out=extract(raw,internal.model);
       return Response.json(responseObject(out,internal.model,respId),{headers:{"x-antigravity-session-id":sessionId,"x-antigravity-debug-id":traceId}});
     }catch(e){
