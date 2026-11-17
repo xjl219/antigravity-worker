@@ -37,7 +37,7 @@ function systemOf(s:AnthropicRequest["system"]):string{
  * `$schema` and `propertyNames`), which the Code Assist API rejects with 400.
  * Keep the compatible subset and apply it recursively to nested schemas.
  */
-function geminiSchema(value:unknown):Record<string,unknown>{
+export function geminiSchema(value:unknown):Record<string,unknown>{
   if(!value||typeof value!=="object"||Array.isArray(value))return {};
   const schema=value as Record<string,unknown>;
   const out:Record<string,unknown>={};
