@@ -17,4 +17,12 @@ describe("API test model selection",()=>{
     expect(page).toContain('x.model=modelEl.value');
     expect(page).toContain('body.model=modelEl.value||DEFAULT_MODEL');
   });
+  it("splits streamed chat responses on real line breaks",()=>{
+    const chatStart=source.indexOf('if((u.pathname==="/admin/gemini"||u.pathname==="/chat"))');
+    const chatEnd=source.indexOf('if((u.pathname==="/admin/chat"||u.pathname==="/chat-test"))',chatStart);
+    const chatPage=source.slice(chatStart,chatEnd);
+    expect(chatPage).toContain(String.raw\`buf.split(/\r?\n/)\`);
+    expect(chatPage).not.toContain(String.raw\`buf.split(/\\r?\n/)\`);
+  });
+
 });
