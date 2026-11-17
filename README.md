@@ -555,6 +555,35 @@ curl https://YOUR_WORKER_HOST/v1/chat/completions \
 
 ---
 
+# 19.1 Codex Responses API
+
+地址：
+
+```text
+POST /v1/responses
+```
+
+当前开发分支新增 Responses 兼容入口，复用现有 Google Code Assist 账号池与 Sticky Session，支持文本输入、非流式响应、SSE 流式输出，以及 function tools / function_call / function_call_output 往返。
+
+Codex CLI 自定义 Provider 示例（模型名应选择当前 Google Code Assist 账号实际可用的模型）：
+
+```toml
+model_provider = "antigravity"
+model = "gemini-2.5-flash"
+
+[model_providers.antigravity]
+name = "Antigravity Worker"
+base_url = "https://YOUR_WORKER_HOST/v1"
+env_key = "ANTIGRAVITY_API_KEY"
+wire_api = "responses"
+```
+
+将环境变量 `ANTIGRAVITY_API_KEY` 设置为 Worker 的 `ADMIN_API_KEY`。当前适配层不保存服务端 Response 历史；客户端需在每轮 `input` 中回传完整对话历史。非空 `previous_response_id` 会明确返回 400，不会静默忽略。Codex hosted tools、图像输入、reasoning item 保真和 WebSocket 传输尚未纳入当前实现范围。
+
+该接口尚需通过真实 Codex CLI + 已授权 Google 账号完成端到端验证；TypeScript 检查和单元测试通过不等于 Codex Agent 已验证可用。
+
+---
+
 # 20. Anthropic 兼容接口
 
 地址：
