@@ -16,6 +16,8 @@ type ResponsesRequest = {
   previous_response_id?:string;
   store?:boolean;
   metadata?:Record<string,unknown>;
+  prompt_cache_key?:string;
+  client_metadata?:Record<string,unknown>|string;
 };
 type OutputItem = Record<string,any>;
 
@@ -164,7 +166,11 @@ export async function handleResponses(req:Request,env:Env):Promise<Response>{
   if(input.input===undefined)return invalid("input is required");
   if(input.previous_response_id)return invalid("previous_response_id is not supported yet; resend the conversation input explicitly");
   const traceId=crypto.randomUUID(),respId=id("resp");
-  let sessionId=req.headers.get("x-antigravity-session-id")??undefined;
+  let sessionId=req.headers.get("x-antigravity-session-id")??req.headers.get("session-id")??req.headers.get("thread-id")??input.prompt_cache_key??undefined;
+  if(!sessionId&&input.client_metadata){
+    try{const meta=typeof input.client_metadata==="string"?JSON.parse(input.client_metadata):input.client_metadata;sessionId=meta?.session_id??meta?.thread_id;}catch{}
+  }
+  const responseModel=input.model??env.DEFAULT_MODEL;
   const failed:string[]=[];
   let last:UpstreamError|undefined;
   for(let attempt=0;attempt<3;attempt++){
@@ -178,7 +184,7 @@ export async function handleResponses(req:Request,env:Env):Promise<Response>{
     try{
       const upstream=await new CodeAssistClient(env).generate(account.access_token,internal,!!input.stream);
       if(input.stream){
-        const stream=streamResponse(upstream.body!,internal.model,respId,
+        const stream=streamResponse(upstream.body!,responseModel,respId,
           async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/success",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:sessionId})});},
           async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/failure",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:sessionId,status:502})});});
         return new Response(stream,{headers:{"content-type":"text/event-stream; charset=utf-8","cache-control":"no-cache","x-antigravity-session-id":sessionId,"x-antigravity-debug-id":traceId}});
