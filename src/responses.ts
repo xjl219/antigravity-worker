@@ -27,7 +27,7 @@ const asText=(value:any):string=>{
 };
 function invalid(message:string,status=400){return Response.json({error:{message,type:"invalid_request_error",param:null,code:null}},{status});}
 
-function buildInternal(input:ResponsesRequest,project:string,defaultModel:string):InternalGenerateRequest{
+export function buildInternal(input:ResponsesRequest,project:string,defaultModel:string):InternalGenerateRequest{
   if(input.previous_response_id)throw new Error("previous_response_id is not supported yet; resend the conversation input explicitly");
   const items:ResponseInputItem[]=typeof input.input==="string"
     ?[{type:"message",role:"user",content:[{type:"input_text",text:input.input}]}]
@@ -74,7 +74,7 @@ function buildInternal(input:ResponsesRequest,project:string,defaultModel:string
   return base;
 }
 
-function extract(raw:any,model:string):{output:OutputItem[];usage:Record<string,number>;finishReason:string}{
+export function extract(raw:any,model:string):{output:OutputItem[];usage:Record<string,number>;finishReason:string}{
   const root=raw?.response??raw;
   const parts:GeminiPart[]=root?.candidates?.[0]?.content?.parts??[];
   const output:OutputItem[]=[];
@@ -137,6 +137,8 @@ function streamResponse(body:ReadableStream<Uint8Array>,model:string,respId:stri
           for(let i=0;i<output.length;i++){
             if(output[i].type!=="function_call")continue;
             event(controller,"response.output_item.added",{type:"response.output_item.added",output_index:i,item:{...output[i],status:"in_progress",arguments:""}});
+            event(controller,"response.function_call_arguments.delta",{type:"response.function_call_arguments.delta",item_id:output[i].id,output_index:i,delta:String(output[i].arguments??"")});
+            event(controller,"response.function_call_arguments.done",{type:"response.function_call_arguments.done",item_id:output[i].id,output_index:i,arguments:String(output[i].arguments??"")});
             event(controller,"response.output_item.done",{type:"response.output_item.done",output_index:i,item:output[i]});
           }
           const result={output,usage:{input_tokens:0,output_tokens:0,total_tokens:0},finishReason:"STOP"};
