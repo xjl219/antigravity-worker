@@ -194,14 +194,14 @@ export async function handleResponses(req:Request,env:Env):Promise<Response>{
     sessionId=currentSessionId;
     if(!account.project_id){const out=Response.json({error:{message:"account has no Code Assist project",type:"server_error"}},{status:503,headers:{"x-antigravity-debug-id":traceId}});await emit({kind:"error",phase:"account configuration error",status:503,accountId:account.account_id,email:account.email,message:"account has no Code Assist project"});await emit({kind:"response",phase:"worker → client",status:503});return out;}
     let internal:InternalGenerateRequest;
-    try{internal=buildInternal(input,account.project_id,env.DEFAULT_MODEL);}catch(e){return invalid(e instanceof Error?e.message:String(e));}
+    try{internal=buildInternal(input,account.project_id,env.DEFAULT_MODEL);}catch(e){const message=e instanceof Error?e.message:String(e);await emit({kind:"error",phase:"request validation",status:400,message});const response=invalid(message);response.headers.set("x-antigravity-debug-id",traceId);await emit({kind:"response",phase:"worker → client",status:400,body:{error:{message,type:"invalid_request_error"}}});return response;}
     await emit({kind:"upstream_request",phase:"worker → Google",accountId:account.account_id,email:account.email,project:account.project_id,requestedModel:responseModel,model:internal.model,stream:!!input.stream,body:redact(internal)});
     try{
       const upstream=await new CodeAssistClient(env).generate(account.access_token,internal,!!input.stream);
       await emit({kind:"upstream_response",phase:"Google → worker",status:upstream.status,headers:redactHeaders(upstream.headers),model:internal.model});
       if(input.stream){
         const stream=streamResponse(upstream.body!,responseModel,respId,
-          async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/success",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:currentSessionId})});},
+          async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/success",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:currentSessionId})});await emit({kind:"response",phase:"Google stream → client",status:200,model:internal.model,stream:true});},
           async()=>{await env.ACCOUNT_POOL.get(env.ACCOUNT_POOL.idFromName("default")).fetch("https://pool/internal/failure",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({account_id:account.account_id,session_id:currentSessionId,status:502})});await emit({kind:"error",phase:"stream conversion error",status:502,accountId:account.account_id});},
           chunk=>{void emit({kind:"upstream_chunk",phase:"Google stream chunk",model:internal.model,data:new TextDecoder().decode(chunk).slice(0,256*1024)});});
         return new Response(stream,{headers:{"content-type":"text/event-stream; charset=utf-8","cache-control":"no-cache","x-antigravity-session-id":currentSessionId,"x-antigravity-debug-id":traceId}});
