@@ -2,6 +2,7 @@ import {randomBase64Url,encryptString} from "./crypto";
 import {authorizationUrl,exchangeCode,userInfo} from "./google-oauth";
 import {CodeAssistClient,UpstreamError} from "./code-assist";
 import {toInternal,streamToOpenAI,toOpenAI} from "./openai";
+import {handleResponses} from "./responses";
 import {toAnthropicInternal,anthropicResponse,anthropicStream} from "./anthropic";
 import type {Env,ChatRequest,AnthropicRequest} from "./types";
 import {debugEvent,redact,redactHeaders} from "./debug";
@@ -465,6 +466,10 @@ connect();
       }
       return new Response(JSON.stringify({type:"error",error:{type:"api_error",message:last?.body??"upstream unavailable"}}),{status:last?.status??503,headers:{"content-type":"application/json","x-antigravity-debug-id":traceId}});
       }catch(error){return unexpectedDebugResponse(env,traceId,error);}
+    }
+
+    if(req.method==="POST"&&u.pathname==="/v1/responses"){
+      return handleResponses(req,env);
     }
 
     if(req.method==="POST"&&u.pathname==="/v1/chat/completions"){
