@@ -32,8 +32,9 @@ function buildInternal(input:ResponsesRequest,project:string,defaultModel:string
   const items:ResponseInputItem[]=typeof input.input==="string"
     ?[{type:"message",role:"user",content:[{type:"input_text",text:input.input}]}]
     :Array.isArray(input.input)?input.input:[];
-  const messages:ChatRequest["messages"]=[];
+  const messages:ChatRequest["messages"]=input.instructions?[{role:"system",content:input.instructions}]:[];
   const contents:Array<{role:"user"|"model";parts:GeminiPart[]}>=[];
+  const functionNames=new Map<string,string>();
   for(const item of items){
     if(!item||typeof item!=="object")continue;
     if(item.type==="message"){
@@ -44,9 +45,12 @@ function buildInternal(input:ResponsesRequest,project:string,defaultModel:string
     }else if(item.type==="function_call"){
       let args:Record<string,unknown>={};
       try{args=typeof item.arguments==="string"?JSON.parse(item.arguments):item.arguments??{};}catch{throw new Error("function_call.arguments must contain valid JSON");}
-      contents.push({role:"model",parts:[{functionCall:{name:String(item.name),args,id:item.call_id??item.id}}]});
+      const callId=String(item.call_id??item.id??id("call"));
+      functionNames.set(callId,String(item.name));
+      contents.push({role:"model",parts:[{functionCall:{name:String(item.name),args,id:callId}}]});
     }else if(item.type==="function_call_output"){
-      contents.push({role:"user",parts:[{functionResponse:{name:String(item.name??"function"),id:item.call_id,response:{result:item.output}}}]});
+      const callId=String(item.call_id??"");
+      contents.push({role:"user",parts:[{functionResponse:{name:functionNames.get(callId)??String(item.name??"function"),id:callId,response:{result:item.output}}}]});
     }else{
       throw new Error(`unsupported Responses input item type: ${String(item.type)}`);
     }
@@ -127,7 +131,7 @@ function streamResponse(body:ReadableStream<Uint8Array>,model:string,respId:stri
             event(controller,"response.output_text.done",{type:"response.output_text.done",item_id:messageId,output_index:itemIndex,content_index:0,text});
             event(controller,"response.content_part.done",{type:"response.content_part.done",item_id:messageId,output_index:itemIndex,content_index:0,part:{type:"output_text",text,annotations:[]}});
             const msg={id:messageId,type:"message",status:"completed",role:"assistant",content:[{type:"output_text",text,annotations:[]}]};
-            output.push(msg);
+            output.unshift(msg);
             event(controller,"response.output_item.done",{type:"response.output_item.done",output_index:itemIndex,item:msg});
           }
           for(let i=0;i<output.length;i++){
@@ -146,11 +150,6 @@ function streamResponse(body:ReadableStream<Uint8Array>,model:string,respId:stri
 }
 
 export async function handleResponses(req:Request,env:Env):Promise<Response>{
-  if(req.headers.get("authorization")!==`Bearer ${env.ADMIN_API_KEY}`){
-    // Browser admin sessions are accepted by the main router before dispatch.
-    const cookie=(req.headers.get("cookie")??"").match(/(?:^|; )ag_admin=([^;]+)/);
-    if(!cookie)return Response.json({error:{message:"unauthorized",type:"authentication_error"}},{status:401});
-  }
   let input:ResponsesRequest;
   try{input=await req.json() as ResponsesRequest;}catch{return invalid("request body must be valid JSON");}
   if(input.input===undefined)return invalid("input is required");
