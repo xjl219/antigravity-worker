@@ -100,6 +100,7 @@ function streamResponse(body:ReadableStream<Uint8Array>,model:string,respId:stri
     start(controller){
       const reader=body.getReader(),decoder=new TextDecoder();
       let buffer="",text="",roleAdded=false;
+      let usage={input_tokens:0,output_tokens:0,total_tokens:0};
       const output:OutputItem[]=[];
       const messageId=id("msg"),itemIndex=0;
       event(controller,"response.created",{type:"response.created",response:{id:respId,object:"response",status:"in_progress",model,output:[]}});
@@ -110,6 +111,12 @@ function streamResponse(body:ReadableStream<Uint8Array>,model:string,respId:stri
         if(!data||data==="[DONE]")return;
         let parsed:any;try{parsed=JSON.parse(data)}catch{return;}
         const root=parsed.response??parsed,parts:GeminiPart[]=root?.candidates?.[0]?.content?.parts??[];
+        const meta=root?.usageMetadata??{};
+        if(meta.promptTokenCount!==undefined||meta.candidatesTokenCount!==undefined){
+          usage.input_tokens=Number(meta.promptTokenCount??meta.total_input_tokens??usage.input_tokens);
+          usage.output_tokens=Number(meta.candidatesTokenCount??meta.total_output_tokens??usage.output_tokens);
+          usage.total_tokens=usage.input_tokens+usage.output_tokens;
+        }
         for(const p of parts){
           if(typeof p.text==="string"&&!p.thought&&p.text){
             if(!roleAdded){
@@ -141,7 +148,7 @@ function streamResponse(body:ReadableStream<Uint8Array>,model:string,respId:stri
             event(controller,"response.function_call_arguments.done",{type:"response.function_call_arguments.done",item_id:output[i].id,output_index:i,arguments:String(output[i].arguments??"")});
             event(controller,"response.output_item.done",{type:"response.output_item.done",output_index:i,item:output[i]});
           }
-          const result={output,usage:{input_tokens:0,output_tokens:0,total_tokens:0},finishReason:"STOP"};
+          const result={output,usage,finishReason:"STOP"};
           event(controller,"response.completed",{type:"response.completed",response:responseObject(result,model,respId)});
           controller.close();await onSuccess();
         }catch(error){await onFailure();event(controller,"error",{type:"error",error:{type:"server_error",message:error instanceof Error?error.message:String(error)}});controller.close();}
