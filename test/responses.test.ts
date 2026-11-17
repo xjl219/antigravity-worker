@@ -38,7 +38,7 @@ describe("Responses API adapter",()=>{
     expect(result.usage).toEqual({input_tokens:12,output_tokens:8,total_tokens:20});
   });
 
-  it("rejects malformed function arguments and unsupported previous response state",()=>{
+  it("rejects unsupported multimodal content instead of silently dropping it",()=>{\n    expect(()=>buildInternal({input:[{type:"message",role:"user",content:[{type:"input_image",image_url:"data:image/png;base64,AA=="}]}]},"p","m")).toThrow(/unsupported message content type/);\n  });\n\n  it("rejects malformed function arguments and unsupported previous response state",()=>{
     expect(()=>buildInternal({input:[{type:"function_call",name:"x",arguments:"{"}]},"p","m")).toThrow(/valid JSON/);
     expect(()=>buildInternal({input:"hi",previous_response_id:"resp_old"},"p","m")).toThrow(/previous_response_id/);
   });
