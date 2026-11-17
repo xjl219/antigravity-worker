@@ -26,6 +26,8 @@ const id=(prefix:string)=>prefix+"_"+crypto.randomUUID().replaceAll("-","");
 const asText=(value:any):string=>{
   if(typeof value==="string")return value;
   if(!Array.isArray(value))return "";
+  const unsupported=value.find(x=>x&&x.type&&!["input_text","output_text","text"].includes(x.type));
+  if(unsupported)throw new Error(`unsupported message content type: ${String(unsupported.type)}`);
   return value.filter(x=>x&&["input_text","output_text","text"].includes(x.type)&&typeof x.text==="string").map(x=>x.text).join("");
 };
 function invalid(message:string,status=400){return Response.json({error:{message,type:"invalid_request_error",param:null,code:null}},{status});}
