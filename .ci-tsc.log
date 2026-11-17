@@ -1,0 +1,6 @@
+
+> antigravity-worker@0.1.0 check
+> tsc --noEmit
+
+test/responses-debug.test.ts(2,28): error TS2307: Cannot find module 'node:fs' or its corresponding type declarations.
+test/responses-debug.test.ts(5,71): error TS2339: Property 'url' does not exist on type 'ImportMeta'.
