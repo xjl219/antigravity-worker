@@ -176,9 +176,10 @@ function finishOf(o:any):string|undefined{
 export function anthropicResponse(o:any,requestedModel:string){
   const ps=partsOf(o);
   const content:any[] = ps.flatMap((p:any): any[]=>{
-    if(p.thought)return [{type:"thinking",thinking:p.text??"",...(validSignature(p.thoughtSignature)?{signature:p.thoughtSignature}:{})}];
+    const signature=p.thoughtSignature??p.thought_signature;
+    if(p.thought)return [{type:"thinking",thinking:p.text??"",...(validSignature(signature)?{signature}:{})}];
     if(p.text!==undefined)return [{type:"text",text:p.text}];
-    if(p.functionCall)return [{type:"tool_use",id:p.functionCall.id??crypto.randomUUID(),name:p.functionCall.name,input:p.functionCall.args??{}}];
+    if(p.functionCall)return [{type:"tool_use",id:p.functionCall.id??crypto.randomUUID(),name:p.functionCall.name,input:p.functionCall.args??{},...(validSignature(signature)?{signature}:{})}];
     return [];
   });
   const finish=finishOf(o);
@@ -250,10 +251,11 @@ export function anthropicStream(
               for(const p of partsOf(o)){
                 if(p.functionCall){
                   close();
-                  block={type:"tool_use",id:p.functionCall.id??crypto.randomUUID(),name:p.functionCall.name};
+                  const signature=p.thoughtSignature??p.thought_signature;
+                  block={type:"tool_use",id:p.functionCall.id??crypto.randomUUID(),name:p.functionCall.name,...(validSignature(signature)?{signature}:{})};
                   controller.enqueue(emit("content_block_start",{
                     type:"content_block_start",index,
-                    content_block:{type:"tool_use",id:block.id,name:block.name,input:{}}
+                    content_block:{type:"tool_use",id:block.id,name:block.name,input:{},...(block.signature?{signature:block.signature}:{})}
                   }));
                   controller.enqueue(emit("content_block_delta",{
                     type:"content_block_delta",index,
@@ -270,8 +272,9 @@ export function anthropicStream(
                   if(p.text)controller.enqueue(emit("content_block_delta",{
                     type:"content_block_delta",index,delta:{type:"thinking_delta",thinking:p.text}
                   }));
-                  if(validSignature(p.thoughtSignature))controller.enqueue(emit("content_block_delta",{
-                    type:"content_block_delta",index,delta:{type:"signature_delta",signature:p.thoughtSignature}
+                  const signature=p.thoughtSignature??p.thought_signature;
+                  if(validSignature(signature))controller.enqueue(emit("content_block_delta",{
+                    type:"content_block_delta",index,delta:{type:"signature_delta",signature}
                   }));
                 } else if(typeof p.text==="string"){
                   if(block?.type!=="text"){
