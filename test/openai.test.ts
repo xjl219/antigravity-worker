@@ -49,7 +49,7 @@ describe("Anthropic adapter",()=>{
     });
   });
 
-  it("adds Google's sentinel signature to unsigned Gemini tool calls",()=>{
+  it("adds Google's sentinel signature to unsigned Gemini 3+ tool calls",()=>{
     const request=toAnthropicInternal({
       model:"gemini-3.8-flash-high",max_tokens:1024,
       messages:[
