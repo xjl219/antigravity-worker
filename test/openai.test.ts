@@ -49,6 +49,43 @@ describe("Anthropic adapter",()=>{
     });
   });
 
+  it("adds Google's sentinel signature to unsigned Gemini 3+ tool calls",()=>{
+    const request=toAnthropicInternal({
+      model:"gemini-3.8-flash-high",max_tokens:1024,
+      messages:[
+        {role:"assistant",content:[
+          {type:"tool_use",id:"tool_grep_1",name:"default_api:grep",input:{pattern:"TODO",path:"src"}}
+        ]},
+        {role:"user",content:[
+          {type:"tool_result",tool_use_id:"tool_grep_1",content:"src/index.ts:23"}
+        ]}
+      ]
+    },"project","test");
+
+    expect(request.model).toBe("gemini-3.8-flash-high");
+    expect(request.request.contents[0].parts[0]).toMatchObject({
+      functionCall:{name:"default_api:grep",id:"tool_grep_1",args:{pattern:"TODO",path:"src"}},
+      thoughtSignature:"skip_thought_signature_validator"
+    });
+    expect(request.request.contents[1].parts[0]).toMatchObject({
+      functionResponse:{name:"default_api:grep",id:"tool_grep_1"}
+    });
+  });
+
+  it("does not add the signature-bypass sentinel to older Gemini tool calls",()=>{
+    const request=toAnthropicInternal({
+      model:"gemini-2.5-flash",max_tokens:1024,
+      messages:[{role:"assistant",content:[
+        {type:"tool_use",id:"tool_old_1",name:"search",input:{query:"test"}}
+      ]}]
+    },"project","test");
+
+    expect(request.request.contents[0].parts[0]).toMatchObject({
+      functionCall:{name:"search",id:"tool_old_1",args:{query:"test"}}
+    });
+    expect(request.request.contents[0].parts[0]).not.toHaveProperty("thoughtSignature");
+  });
+
   it("converts JSON Schema tool inputs to Gemini's compatible schema subset",()=>{
     const inputSchema={
       $schema:"https://json-schema.org/draft/2020-12/schema",

@@ -72,7 +72,7 @@ function toolConfig(c:AnthropicRequest["tool_choice"]){
   return {functionCallingConfig:{mode:"ANY"}};
 }
 
-function contentsOf(ms:AnthropicRequest["messages"],thinking:boolean){
+function contentsOf(ms:AnthropicRequest["messages"],signatureFallback:boolean){
   const out:Array<{role:"user"|"model";parts:GeminiPart[]}>= [];
   const toolNames=new Map<string,string>();
   let signatureAnchor:string|undefined;
@@ -97,9 +97,10 @@ function contentsOf(ms:AnthropicRequest["messages"],thinking:boolean){
         if(b.data)parts.push({text:b.data,thought:true});
       } else if(b.type==="tool_use"){
         toolNames.set(b.id,b.name);
-        // v4.7.x compatibility: preserve one real signature anchor; parallel
-        // function calls after the anchor use the upstream sentinel.
-        const sig=validSignature(b.signature)?b.signature:(signatureAnchor??(thinking?SENTINEL_SIGNATURE:undefined));
+        // Preserve a real signature when the client returns it. Anthropic clients
+        // do not always expose Google's private signature extension. Use Google's
+        // validator-bypass sentinel only when the upstream model requires signatures.
+        const sig=validSignature(b.signature)?b.signature:(signatureAnchor??(signatureFallback?SENTINEL_SIGNATURE:undefined));
         if(validSignature(b.signature))signatureAnchor=b.signature;
         parts.push({functionCall:{name:b.name,args:b.input??{},id:b.id},...(sig?{thoughtSignature:sig}:{})});
       } else if(b.type==="tool_result"){
@@ -125,8 +126,10 @@ function contentsOf(ms:AnthropicRequest["messages"],thinking:boolean){
 export function toAnthropicInternal(input:AnthropicRequest,project:string|undefined,ua:string):InternalGenerateRequest{
   const model=modelMap(input.model);
   const thinking=input.thinking?.type==="enabled"||model.includes("thinking")||model.includes("claude");
+  const geminiMajor=/^gemini-(\d+)/i.exec(model)?.[1];
+  const signatureFallback=geminiMajor!==undefined?Number(geminiMajor)>=3:thinking;
   const request:InternalGenerateRequest["request"]={
-    contents:contentsOf(input.messages,thinking),
+    contents:contentsOf(input.messages,signatureFallback),
     generationConfig:{maxOutputTokens:input.max_tokens}
   };
   const system=systemOf(input.system);
