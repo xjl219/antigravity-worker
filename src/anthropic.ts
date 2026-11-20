@@ -97,9 +97,11 @@ function contentsOf(ms:AnthropicRequest["messages"],thinking:boolean){
         if(b.data)parts.push({text:b.data,thought:true});
       } else if(b.type==="tool_use"){
         toolNames.set(b.id,b.name);
-        // v4.7.x compatibility: preserve one real signature anchor; parallel
-        // function calls after the anchor use the upstream sentinel.
-        const sig=validSignature(b.signature)?b.signature:(signatureAnchor??(thinking?SENTINEL_SIGNATURE:undefined));
+        // Preserve a real signature when the client returns it. Anthropic clients
+        // do not always expose Google's private signature extension, so use
+        // Google's validator-bypass sentinel for every unsigned function call,
+        // including Gemini non-thinking models.
+        const sig=validSignature(b.signature)?b.signature:(signatureAnchor??SENTINEL_SIGNATURE);
         if(validSignature(b.signature))signatureAnchor=b.signature;
         parts.push({functionCall:{name:b.name,args:b.input??{},id:b.id},...(sig?{thoughtSignature:sig}:{})});
       } else if(b.type==="tool_result"){
