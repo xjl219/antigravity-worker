@@ -53,7 +53,8 @@ export function buildInternal(input:ResponsesRequest,project:string,defaultModel
       try{args=typeof item.arguments==="string"?JSON.parse(item.arguments):item.arguments??{};}catch{throw new Error("function_call.arguments must contain valid JSON");}
       const callId=String(item.call_id??item.id??id("call"));
       functionNames.set(callId,String(item.name));
-      contents.push({role:"model",parts:[{functionCall:{name:String(item.name),args,id:callId}}]});
+      const signature=item.extra_content?.google?.thought_signature??item.extraContent?.google?.thought_signature??item.google?.thought_signature;
+      contents.push({role:"model",parts:[{functionCall:{name:String(item.name),args,id:callId},...(typeof signature==="string"&&signature?{thoughtSignature:signature}:{})}]});
     }else if(item.type==="function_call_output"){
       const callId=String(item.call_id??"");
       contents.push({role:"user",parts:[{functionResponse:{name:functionNames.get(callId)??String(item.name??"function"),id:callId,response:{result:item.output}}}]});
@@ -90,7 +91,10 @@ export function extract(raw:any,model:string):{output:OutputItem[];usage:Record<
   const text=parts.filter(p=>typeof p.text==="string"&&!p.thought).map(p=>p.text).join("");
   if(text)output.push({id:id("msg"),type:"message",status:"completed",role:"assistant",content:[{type:"output_text",text,annotations:[]}]});
   for(const p of parts){
-    if(p.functionCall?.name)output.push({id:id("fc"),type:"function_call",status:"completed",call_id:p.functionCall.id??id("call"),name:p.functionCall.name,arguments:JSON.stringify(p.functionCall.args??{})});
+    if(p.functionCall?.name){
+      const signature=p.thoughtSignature??p.thought_signature;
+      output.push({id:id("fc"),type:"function_call",status:"completed",call_id:p.functionCall.id??id("call"),name:p.functionCall.name,arguments:JSON.stringify(p.functionCall.args??{}),...(typeof signature==="string"&&signature?{extra_content:{google:{thought_signature:signature}}}:{})});
+    }
   }
   const u=root?.usageMetadata??{};
   const input_tokens=Number(u.promptTokenCount??u.total_input_tokens??0);
@@ -136,7 +140,10 @@ function streamResponse(body:ReadableStream<Uint8Array>,model:string,respId:stri
             text+=p.text;
             event(controller,"response.output_text.delta",{type:"response.output_text.delta",item_id:messageId,output_index:itemIndex,content_index:0,delta:p.text});
           }
-          if(p.functionCall?.name)output.push({id:id("fc"),type:"function_call",status:"completed",call_id:p.functionCall.id??id("call"),name:p.functionCall.name,arguments:JSON.stringify(p.functionCall.args??{})});
+          if(p.functionCall?.name){
+            const signature=p.thoughtSignature??p.thought_signature;
+            output.push({id:id("fc"),type:"function_call",status:"completed",call_id:p.functionCall.id??id("call"),name:p.functionCall.name,arguments:JSON.stringify(p.functionCall.args??{}),...(typeof signature==="string"&&signature?{extra_content:{google:{thought_signature:signature}}}:{})});
+          }
         }
       };
       (async()=>{
