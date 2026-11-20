@@ -126,7 +126,7 @@ function contentsOf(ms:AnthropicRequest["messages"],signatureFallback:boolean){
 export function toAnthropicInternal(input:AnthropicRequest,project:string|undefined,ua:string):InternalGenerateRequest{
   const model=modelMap(input.model);
   const thinking=input.thinking?.type==="enabled"||model.includes("thinking")||model.includes("claude");
-  const geminiMajor=/^gemini-(\\d+)/i.exec(model)?.[1];
+  const geminiMajor=/^gemini-(\d+)/i.exec(model)?.[1];
   const signatureFallback=geminiMajor!==undefined?Number(geminiMajor)>=3:thinking;
   const request:InternalGenerateRequest["request"]={
     contents:contentsOf(input.messages,signatureFallback),
