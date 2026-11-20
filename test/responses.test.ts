@@ -38,6 +38,25 @@ describe("Responses API adapter",()=>{
     expect(result.usage).toEqual({input_tokens:12,output_tokens:8,total_tokens:20});
   });
 
+  it("round-trips Google thought signatures through Responses function_call items",()=>{
+    const signature="A".repeat(96);
+    const result=extract({response:{candidates:[{content:{parts:[
+      {functionCall:{name:"list_dir",id:"call_sig",args:{path:"/"}},thoughtSignature:signature}
+    ]}}]}}, "gemini-3.8-flash-low");
+    expect(result.output[0]).toMatchObject({
+      type:"function_call",
+      extra_content:{google:{thought_signature:signature}}
+    });
+    const req=buildInternal({input:[
+      result.output[0],
+      {type:"function_call_output",call_id:"call_sig",output:"[]"}
+    ]},"project-1","gemini-3.8-flash-low");
+    expect(req.request.contents[0].parts[0]).toMatchObject({
+      functionCall:{name:"list_dir",id:"call_sig",args:{path:"/" }},
+      thoughtSignature:signature
+    });
+  });
+
   it("rejects unsupported multimodal content instead of silently dropping it",()=>{
     expect(()=>buildInternal({input:[{type:"message",role:"user",content:[{type:"input_image",image_url:"data:image/png;base64,AA=="}]}]},"p","m")).toThrow(/unsupported message content type/);
   });
